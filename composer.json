@@ -1,0 +1,68 @@
+{
+    "name": "hampel/cloudflare-api",
+    "description": "A PHP client for the Cloudflare API - zones, DNS records and token verification - over any PSR-18 HTTP client",
+    "authors": [
+        {
+            "name": "Simon Hampel",
+            "email": "simon@hampelgroup.com",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/hampel/cloudflare-api/issues",
+        "source": "https://github.com/hampel/cloudflare-api"
+    },
+    "keywords": [
+        "cloudflare",
+        "dns",
+        "zones",
+        "api",
+        "psr-18"
+    ],
+    "homepage": "https://github.com/hampel/cloudflare-api",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.3",
+        "ext-ctype": "*",
+        "ext-json": "*",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/http-message": "^1.1|^2.0",
+        "psr/log": "^1.1|^2.0|^3.0"
+    },
+    "require-dev": {
+        "guzzlehttp/guzzle": "^7.8|^8.0",
+        "hampel/rig": "^1.1",
+        "laravel/pint": "^1.30",
+        "phpstan/phpstan": "^2.1.22",
+        "phpunit/phpunit": "^12.0"
+    },
+    "suggest": {
+        "guzzlehttp/guzzle": "A PSR-18 client to send requests with; any implementation will do",
+        "guzzlehttp/psr7": "PSR-17 factories, found automatically when none are passed to Client - as are nyholm/psr7 and laminas/laminas-diactoros"
+    },
+    "autoload": {
+        "psr-4": {
+            "Hampel\\Cloudflare\\Api\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Hampel\\Cloudflare\\Api\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "analyse": "phpstan analyse",
+        "format": "pint",
+        "lint": "pint --test",
+        "check": [
+            "@lint",
+            "@analyse",
+            "@test"
+        ]
+    }
+}

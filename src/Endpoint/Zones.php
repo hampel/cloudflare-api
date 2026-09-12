@@ -1,0 +1,227 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Hampel\Cloudflare\Api\Endpoint;
+
+use Hampel\Cloudflare\Api\Entity\Zone;
+use Hampel\Cloudflare\Api\Enum\ZoneStatus;
+use Hampel\Cloudflare\Api\Exception\InvalidArgumentException;
+use Hampel\Cloudflare\Api\Result\Page;
+
+/**
+ * Zones - one per domain.
+ *
+ * https://developers.cloudflare.com/api/resources/zones/
+ *
+ * READ-ONLY, DELIBERATELY. Listing and fetching are here; creating, deleting and
+ * reconfiguring a zone are not. Those are rare acts with large consequences, usually done
+ * once in the dashboard, and their absence means no code path in a consuming application can
+ * reach them by accident. Connection is the way out if one is genuinely needed.
+ *
+ * Needs `Zone:Read` on the token. A token scoped to one zone can still call these - it sees
+ * a collection of one.
+ *
+ * THE ID IS WHAT EVERYTHING ELSE NEEDS, and the name is what you have. findByName() is the
+ * bridge, and on an account of any size it is the first call a job makes.
+ *
+ * PAGE SIZES HERE ARE 5 TO 50, not the 1 to 5,000,000 the DNS record endpoint accepts. The
+ * default is 20.
+ */
+final class Zones extends Endpoint
+{
+    public const MIN_PAGE_SIZE = 5;
+
+    public const MAX_PAGE_SIZE = 50;
+
+    /**
+     * The API's own default when a request does not ask for a size.
+     */
+    public const DEFAULT_PAGE_SIZE = 20;
+
+    /**
+     * One page of the account's zones.
+     *
+     * @return Page<Zone>
+     */
+    public function list(int $page = 1, ?int $pageSize = null, ?ZoneStatus $status = null): Page
+    {
+        return $this->apiPaginate('zones', Zone::fromArray(...), $page, $pageSize, self::filter($status));
+    }
+
+    /**
+     * Every zone, a page at a time, fetched only as far as it is consumed.
+     *
+     * @return \Generator<int, Zone>
+     */
+    public function each(?int $pageSize = null, ?ZoneStatus $status = null): \Generator
+    {
+        return $this->apiEach('zones', Zone::fromArray(...), $pageSize, self::filter($status));
+    }
+
+    /**
+     * Every zone, as a list.
+     *
+     * Fine for an account with tens of zones and a bad idea for one with thousands - it holds
+     * them all in memory and makes every request before returning any of them. Use each()
+     * where the count is unknown.
+     *
+     * @return list<Zone>
+     */
+    public function all(?ZoneStatus $status = null): array
+    {
+        return iterator_to_array($this->each(status: $status), false);
+    }
+
+    /**
+     * One zone by id. Raises NotFoundException when there is no such zone, or when this token
+     * may not see it - Cloudflare does not distinguish the two, and neither can this.
+     */
+    public function get(string $zoneId): Zone
+    {
+        return Zone::fromArray($this->apiGet($this->path($zoneId))->object());
+    }
+
+    /**
+     * One zone by id, or null when it is not there.
+     */
+    public function find(string $zoneId): ?Zone
+    {
+        return $this->apiFind($this->path($zoneId), Zone::fromArray(...));
+    }
+
+    /**
+     * One zone by DOMAIN NAME, or null.
+     *
+     * The call that turns the thing you have into the thing every other endpoint wants. The
+     * name is unique across the whole of Cloudflare, so at most one zone comes back - but it
+     * comes back inside a collection envelope, because the endpoint is the list one.
+     *
+     * The name is lower-cased here: DNS is case-insensitive and a zone is stored lower-case,
+     * so `Example.COM` would otherwise find nothing while looking like it should.
+     *
+     * THE NAME IS CHECKED AGAIN ON THE WAY BACK, which looks like belt and braces and is not.
+     * This method's whole correctness rests on the server honouring `?name=`, and the failure
+     * mode if it ever stopped is not an error - it is a 200 carrying the first zone on the
+     * account, which this would return as "the zone called example.com". Everything
+     * downstream then edits the wrong domain's DNS. A filter being ignored is a silent
+     * success, so it is caught by confirming the answer rather than by trusting the request;
+     * the `filtering` harness exercise is the other half of the same check.
+     */
+    public function findByName(string $domain): ?Zone
+    {
+        $domain = strtolower(trim($domain, ". \t\n\r\0\x0B"));
+
+        if ($domain === '') {
+            throw new InvalidArgumentException('A domain name is required to look a zone up.');
+        }
+
+        $page = $this->apiPaginate(
+            'zones',
+            Zone::fromArray(...),
+            1,
+            self::MIN_PAGE_SIZE,
+            ['name' => $domain]
+        );
+
+        foreach ($page->items as $candidate) {
+            if (strtolower(trim($candidate->name, '. ')) === $domain) {
+                return $candidate;
+            }
+        }
+
+        if (!$page->isEmpty()) {
+            $this->logger->warning('Cloudflare answered a filtered zone lookup with something else', [
+                'asked_for' => $domain,
+                'received' => array_map(static fn (Zone $item): string => $item->name, $page->items),
+                'results' => $page->total(),
+            ]);
+        }
+
+        return null;
+    }
+
+    /**
+     * The same lookup, raising rather than returning null.
+     *
+     * For a job whose whole purpose concerns one domain, where a missing zone is a
+     * misconfiguration to stop on rather than a case to handle.
+     */
+    public function getByName(string $domain): Zone
+    {
+        $zone = $this->findByName($domain);
+
+        if ($zone === null) {
+            throw new InvalidArgumentException(sprintf(
+                'No zone named "%s" is visible to this token. Either Cloudflare does not hold '
+                    . 'that domain, or the token\'s zone resources do not include it - which '
+                    . 'look identical from here.',
+                $domain
+            ));
+        }
+
+        return $zone;
+    }
+
+    /**
+     * Records within a zone, as a bound endpoint: every call knows its zone.
+     *
+     *     $cloudflare->zones()->records($zoneId)->all();
+     *
+     * The same operations are on `$cloudflare->records()` with the zone id as the first
+     * argument. This is the one to reach for when several calls concern one zone.
+     */
+    public function records(string $zoneId): BoundDnsRecords
+    {
+        return new BoundDnsRecords(new DnsRecords($this->connection, $this->logger), $zoneId);
+    }
+
+    protected function minimumPageSize(): int
+    {
+        return self::MIN_PAGE_SIZE;
+    }
+
+    protected function maximumPageSize(): int
+    {
+        return self::MAX_PAGE_SIZE;
+    }
+
+    protected function collectionName(): string
+    {
+        return 'zones';
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    private static function filter(?ZoneStatus $status): array
+    {
+        return $status === null ? [] : ['status' => $status->value];
+    }
+
+    private function path(string $zoneId): string
+    {
+        return 'zones/' . self::identifier($zoneId, 'zone');
+    }
+
+    /**
+     * An empty identifier would build `zones/` - the LIST path - and a GET against it
+     * succeeds, returning the first page of every zone the token can see. Read as one zone
+     * that is whichever zone happened to sort first, and anything editing it afterwards is
+     * editing the wrong domain. Refusing it here costs nothing.
+     */
+    public static function identifier(string $id, string $of): string
+    {
+        $id = trim($id);
+
+        if ($id === '') {
+            throw new InvalidArgumentException(sprintf(
+                'A %s id is required. An empty one addresses the collection instead, which '
+                    . 'answers with a 200 and the wrong thing rather than an error.',
+                $of
+            ));
+        }
+
+        return rawurlencode($id);
+    }
+}

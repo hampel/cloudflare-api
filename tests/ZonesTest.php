@@ -1,0 +1,262 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Hampel\Cloudflare\Api\Tests;
+
+use Hampel\Cloudflare\Api\Config;
+use Hampel\Cloudflare\Api\Entity\Zone;
+use Hampel\Cloudflare\Api\Enum\ZoneStatus;
+use Hampel\Cloudflare\Api\Enum\ZoneType;
+use Hampel\Cloudflare\Api\Exception\InvalidArgumentException;
+use Hampel\Cloudflare\Api\Exception\NotFoundException;
+
+final class ZonesTest extends TestCase
+{
+    /**
+     * A zone row in the shape the specification describes.
+     *
+     * @return array<string, mixed>
+     */
+    private function row(string $name = 'example.com', string $id = self::ZONE_ID): array
+    {
+        return [
+            'id' => $id,
+            'name' => $name,
+            'status' => 'active',
+            'paused' => false,
+            'type' => 'full',
+            'development_mode' => 0,
+            'name_servers' => ['ada.ns.cloudflare.com', 'bob.ns.cloudflare.com'],
+            'original_name_servers' => ['ns1.example-registrar.com'],
+            'original_registrar' => 'Example Registrar, LLC',
+            'account' => ['id' => '01a7362d577a6c3019a474fd6f485823', 'name' => 'Example Account'],
+            'plan' => ['id' => '0feee', 'name' => 'Free Website'],
+            'created_on' => '2014-01-01T05:20:00.12345Z',
+            'modified_on' => '2014-01-01T05:20:00.12345Z',
+            'activated_on' => '2014-01-02T00:01:00.12345Z',
+        ];
+    }
+
+    public function test_it_lists_a_page_of_zones(): void
+    {
+        $this->client->pushJson(200, $this->collection(
+            [$this->row(), $this->row('example.net', 'b' . substr(self::ZONE_ID, 1))],
+            page: 1,
+            totalPages: 3,
+            totalCount: 47,
+            perPage: 20
+        ));
+
+        $page = $this->cloudflare()->zones()->list();
+
+        $this->assertCount(2, $page);
+        $this->assertSame(47, $page->total(), 'total_count is everything, not this page');
+        $this->assertSame(3, $page->lastPage());
+        $this->assertTrue($page->hasMore());
+        $this->assertSame('example.com', $page->items[0]->name);
+        $this->assertSame(ZoneStatus::Active, $page->items[0]->status);
+        $this->assertSame(ZoneType::Full, $page->items[0]->type);
+        $this->assertSame('Example Account', $page->items[0]->accountName);
+        $this->assertSame(['ada.ns.cloudflare.com', 'bob.ns.cloudflare.com'], $page->items[0]->nameServers);
+        $this->assertSame('/client/v4/zones', $this->sentPath());
+    }
+
+    public function test_each_walks_the_pages_and_stops_at_the_last_one(): void
+    {
+        $this->client->pushJson(200, $this->collection([$this->row('a.example')], page: 1, totalPages: 2, totalCount: 2));
+        $this->client->pushJson(200, $this->collection([$this->row('b.example')], page: 2, totalPages: 2, totalCount: 2));
+
+        $zones = iterator_to_array($this->cloudflare()->zones()->each(), false);
+
+        $this->assertSame(['a.example', 'b.example'], array_map(fn (Zone $z): string => $z->name, $zones));
+        $this->assertCount(2, $this->client->requests, 'no wasted request past the last page');
+        $this->assertSame('2', $this->sentParameters()['page']);
+    }
+
+    public function test_a_walk_stopped_early_stops_making_requests(): void
+    {
+        $this->client->pushJson(200, $this->collection([$this->row('a.example')], page: 1, totalPages: 9, totalCount: 9));
+
+        foreach ($this->cloudflare()->zones()->each() as $zone) {
+            $this->assertSame('a.example', $zone->name);
+            break;
+        }
+
+        $this->assertCount(1, $this->client->requests);
+    }
+
+    /**
+     * The limits differ per endpoint on this API, and zones is the narrow one. A page size
+     * that is perfectly good for DNS records is refused here.
+     */
+    public function test_a_page_size_this_endpoint_would_refuse_never_leaves_the_process(): void
+    {
+        foreach ([1, 4, 51, 100] as $size) {
+            try {
+                $this->cloudflare()->zones()->list(pageSize: $size);
+                $this->fail('page size ' . $size . ' was accepted');
+            } catch (InvalidArgumentException $e) {
+                $this->assertStringContainsString('between 5 and 50 for zones', $e->getMessage());
+            }
+        }
+
+        $this->assertSame([], $this->client->requests);
+    }
+
+    public function test_a_valid_page_size_is_sent_as_per_page(): void
+    {
+        $this->client->pushJson(200, $this->collection([]));
+        $this->cloudflare()->zones()->list(pageSize: 50);
+
+        $this->assertSame(['per_page' => '50', 'page' => '1'], $this->sentParameters());
+    }
+
+    public function test_a_default_page_size_from_the_config_applies(): void
+    {
+        $this->client->pushJson(200, $this->collection([]));
+        $this->cloudflare(new Config(pageSize: 25))->zones()->list();
+
+        $this->assertSame('25', $this->sentParameters()['per_page']);
+    }
+
+    public function test_one_zone_by_id(): void
+    {
+        $this->client->pushJson(200, $this->envelope($this->row()));
+
+        $zone = $this->cloudflare()->zones()->get(self::ZONE_ID);
+
+        $this->assertSame('example.com', $zone->name);
+        $this->assertSame('/client/v4/zones/' . self::ZONE_ID, $this->sentPath());
+        $this->assertTrue($zone->isActive());
+        $this->assertFalse($zone->isPaused());
+        $this->assertSame('2014-01-01', $zone->createdOn?->format('Y-m-d'));
+    }
+
+    public function test_find_returns_null_for_a_zone_that_is_not_there(): void
+    {
+        $this->client->pushJson(404, $this->failure([['code' => 1049, 'message' => 'Invalid zone identifier']]));
+
+        $this->assertNull($this->cloudflare()->zones()->find(self::ZONE_ID));
+    }
+
+    public function test_get_raises_for_a_zone_that_is_not_there(): void
+    {
+        $this->client->pushJson(404, $this->failure([['code' => 1049, 'message' => 'Invalid zone identifier']]));
+
+        $this->expectException(NotFoundException::class);
+
+        $this->cloudflare()->zones()->get(self::ZONE_ID);
+    }
+
+    public function test_find_by_name_filters_on_the_name_and_lower_cases_it(): void
+    {
+        $this->client->pushJson(200, $this->collection([$this->row()], perPage: 5));
+
+        $zone = $this->cloudflare()->zones()->findByName('Example.COM.');
+
+        $this->assertNotNull($zone);
+        $this->assertSame(self::ZONE_ID, $zone->id);
+        $this->assertSame('example.com', $this->sentParameters()['name']);
+    }
+
+    /**
+     * The whole correctness of findByName() rests on the server honouring `?name=`. If it
+     * ever stopped, the failure would not be an error - it would be a 200 carrying the first
+     * zone on the account, returned as "the zone called example.com", and everything
+     * downstream would then edit the wrong domain's DNS.
+     */
+    public function test_find_by_name_refuses_an_answer_that_is_not_the_zone_it_asked_for(): void
+    {
+        $logger = new RecordingLogger();
+        $this->client->pushJson(200, $this->collection([$this->row('somebody-else.com')], perPage: 5));
+
+        $zone = $this->cloudflare(logger: $logger)->zones()->findByName('example.com');
+
+        $this->assertNull($zone, 'a filter the server ignored must not come back as a match');
+        $this->assertNotNull($logger->contextFor('Cloudflare answered a filtered zone lookup with something else'));
+    }
+
+    public function test_find_by_name_refuses_an_empty_name_before_making_a_request(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        try {
+            $this->cloudflare()->zones()->findByName('  .  ');
+        } finally {
+            $this->assertSame([], $this->client->requests);
+        }
+    }
+
+    public function test_get_by_name_raises_with_both_reasons_when_nothing_matches(): void
+    {
+        $this->client->pushJson(200, $this->collection([], perPage: 5));
+
+        try {
+            $this->cloudflare()->zones()->getByName('example.com');
+            $this->fail('did not raise');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('example.com', $e->getMessage());
+            $this->assertStringContainsString('zone resources', $e->getMessage());
+        }
+    }
+
+    /**
+     * An empty id builds the collection path, which answers 200 with the first page of every
+     * zone - read as one zone, that is whichever zone sorted first.
+     */
+    public function test_an_empty_zone_id_is_refused_rather_than_addressing_the_collection(): void
+    {
+        try {
+            $this->cloudflare()->zones()->get('  ');
+            $this->fail('did not raise');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('addresses the collection instead', $e->getMessage());
+            $this->assertSame([], $this->client->requests);
+        }
+    }
+
+    public function test_a_status_filter_is_sent(): void
+    {
+        $this->client->pushJson(200, $this->collection([]));
+        $this->cloudflare()->zones()->list(status: ZoneStatus::Pending);
+
+        $this->assertSame('pending', $this->sentParameters()['status']);
+    }
+
+    public function test_a_pending_zone_is_not_active(): void
+    {
+        $row = $this->row();
+        $row['status'] = 'pending';
+        $this->client->pushJson(200, $this->envelope($row));
+
+        $zone = $this->cloudflare()->zones()->get(self::ZONE_ID);
+
+        $this->assertFalse($zone->isActive());
+        $this->assertTrue($zone->isPending());
+    }
+
+    public function test_fqdn_builds_a_full_record_name_from_a_label(): void
+    {
+        $zone = Zone::fromArray($this->row());
+
+        $this->assertSame('www.example.com', $zone->fqdn('www'));
+        $this->assertSame('example.com', $zone->fqdn(''), 'the apex is the zone name itself');
+        $this->assertSame('example.com', $zone->fqdn('@'));
+        $this->assertSame('www.example.com', $zone->fqdn('www.example.com'), 'already qualified, left alone');
+        $this->assertSame('www.example.com', $zone->fqdn('WWW.'), 'case and trailing dot normalised');
+        $this->assertSame('a.b.example.com', $zone->fqdn('a.b'));
+    }
+
+    public function test_an_unknown_status_does_not_break_the_entity(): void
+    {
+        $row = $this->row();
+        $row['status'] = 'something-new';
+        $this->client->pushJson(200, $this->envelope($row));
+
+        $zone = $this->cloudflare()->zones()->get(self::ZONE_ID);
+
+        $this->assertNull($zone->status, 'an unmapped value is null rather than an error');
+        $this->assertSame('something-new', $zone->raw['status'], 'and is still reachable raw');
+    }
+}

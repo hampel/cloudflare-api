@@ -65,6 +65,48 @@ final class RecordQueryTest extends BaseTestCase
         $this->assertSame(['tag.exact' => 'team:DNS'], RecordQuery::make()->tagIs('team:DNS')->toQuery());
     }
 
+    /**
+     * The comment and tag predicates, and the halves of the match pair that the test above
+     * leaves alone. Each is one line and none was exercised, so a mistyped parameter name
+     * would have shipped - which is the failure this whole class exists to prevent, since the
+     * API ignores an unrecognised filter rather than refusing it.
+     */
+    public function test_the_remaining_predicates_map_to_their_parameters(): void
+    {
+        $this->assertSame(
+            ['comment.exact' => 'managed by terraform'],
+            RecordQuery::make()->comment('managed by terraform')->toQuery()
+        );
+
+        $this->assertSame(
+            ['comment.contains' => 'terraform'],
+            RecordQuery::make()->commentContains('terraform')->toQuery()
+        );
+
+        $this->assertSame(
+            ['tag.contains' => 'team:DN'],
+            RecordQuery::make()->tagContains('team:DN')->toQuery()
+        );
+
+        $this->assertSame(
+            ['search' => 'www.example.com'],
+            RecordQuery::make()->search('www.example.com')->toQuery()
+        );
+    }
+
+    public function test_the_other_half_of_each_match_pair(): void
+    {
+        $this->assertSame('all', RecordQuery::make()->matchAll()->toQuery()['match']);
+        $this->assertSame('any', RecordQuery::make()->tagMatchAny()->toQuery()['tag_match']);
+    }
+
+    public function test_ascending_restores_a_direction_that_was_reversed(): void
+    {
+        $query = RecordQuery::make()->orderBy('name', 'desc')->ascending();
+
+        $this->assertSame(['order' => 'name', 'direction' => 'asc'], $query->toQuery());
+    }
+
     public function test_a_tag_value_condition_without_a_value_is_refused(): void
     {
         try {

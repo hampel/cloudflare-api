@@ -57,6 +57,51 @@ final class DnsRecordEntityTest extends BaseTestCase
         $this->assertSame('www.example.com', DnsRecord::a('www.example.com.', '203.0.113.10')->name);
     }
 
+    /**
+     * The three named constructors the README lists that nothing else here exercises. Each is
+     * a one-liner, and each puts its value in a different place - so the assertion is the
+     * emitted payload rather than the constructor returning something.
+     */
+    public function test_the_remaining_named_constructors_emit_the_right_payload(): void
+    {
+        $this->assertSame(
+            ['type' => 'AAAA', 'name' => 'www.example.com', 'content' => '2001:db8::1'],
+            DnsRecord::aaaa('www.example.com', '2001:db8::1')->toArray()
+        );
+
+        $this->assertSame(
+            ['type' => 'NS', 'name' => 'sub.example.com', 'content' => 'ns1.elsewhere.com'],
+            DnsRecord::ns('sub.example.com', 'ns1.elsewhere.com')->toArray()
+        );
+
+        $this->assertSame(
+            ['type' => 'PTR', 'name' => '10.113.0.203.in-addr.arpa', 'content' => 'www.example.com'],
+            DnsRecord::ptr('10.113.0.203.in-addr.arpa', 'www.example.com')->toArray()
+        );
+    }
+
+    /**
+     * Caught per case rather than with expectException(), which would end the test on the
+     * first throw and leave the other two constructors unexercised while still passing.
+     */
+    public function test_those_constructors_refuse_an_empty_value_like_the_others(): void
+    {
+        $cases = [
+            'aaaa' => fn (): DnsRecord => DnsRecord::aaaa('www.example.com', ''),
+            'ns' => fn (): DnsRecord => DnsRecord::ns('sub.example.com', ''),
+            'ptr' => fn (): DnsRecord => DnsRecord::ptr('10.113.0.203.in-addr.arpa', ' '),
+        ];
+
+        foreach ($cases as $name => $build) {
+            try {
+                $build();
+                $this->fail($name . '() accepted an empty value');
+            } catch (InvalidArgumentException $e) {
+                $this->assertStringContainsString('needs', $e->getMessage(), $name);
+            }
+        }
+    }
+
     public function test_an_empty_name_is_refused_with_the_reason(): void
     {
         try {

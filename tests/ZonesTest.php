@@ -63,6 +63,30 @@ final class ZonesTest extends TestCase
         $this->assertSame('/client/v4/zones', $this->sentPath());
     }
 
+    /**
+     * Page implements IteratorAggregate, so `foreach ($page as $zone)` is part of the public
+     * API and is what a caller writes in preference to reaching for `->items`. Nothing else
+     * here runs getIterator().
+     */
+    public function test_a_page_can_be_iterated_and_counted_directly(): void
+    {
+        $this->client->pushJson(200, $this->collection(
+            [$this->row('a.example'), $this->row('b.example')],
+            totalCount: 2
+        ));
+
+        $page = $this->cloudflare()->zones()->list();
+        $names = [];
+
+        foreach ($page as $zone) {
+            $names[] = $zone->name;
+        }
+
+        $this->assertSame(['a.example', 'b.example'], $names);
+        $this->assertCount(2, $page, 'Countable counts this page, not the collection');
+        $this->assertSame(1, $page->currentPage());
+    }
+
     public function test_each_walks_the_pages_and_stops_at_the_last_one(): void
     {
         $this->client->pushJson(200, $this->collection([$this->row('a.example')], page: 1, totalPages: 2, totalCount: 2));

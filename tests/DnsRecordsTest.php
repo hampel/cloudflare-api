@@ -184,6 +184,54 @@ final class DnsRecordsTest extends TestCase
     }
 
     /**
+     * `patch()` accepts a DnsRecord as well as an array, and that branch calls
+     * `toPatchArray()` - the method that decides what a partial update actually sends. Every
+     * other patch test here passes an array, so without this the branch never executes.
+     *
+     * What it must produce is the partial payload: a record built from scratch carries only
+     * the fields that were set on it, so only those are sent and Cloudflare leaves the rest
+     * alone.
+     */
+    public function test_patching_with_a_record_sends_only_the_fields_that_record_carries(): void
+    {
+        $this->client->pushJson(200, $this->envelope($this->row()));
+
+        $this->cloudflare()->records()->patch(
+            self::ZONE_ID,
+            self::RECORD_ID,
+            DnsRecord::txt('_dmarc.example.com', 'v=DMARC1; p=none')->withTtl(300)
+        );
+
+        $this->assertSame('PATCH', $this->sentMethod());
+        $this->assertSame([
+            'type' => 'TXT',
+            'name' => '_dmarc.example.com',
+            'content' => 'v=DMARC1; p=none',
+            'ttl' => 300,
+        ], $this->sentBody(), 'nothing the record was never given is sent');
+    }
+
+    /**
+     * A record read back from the API has every field populated, so patching with one sends
+     * all of them - the same values it already had. Worth pinning: it is the difference
+     * between the two things `patch()` accepts, and the reason the array form exists.
+     */
+    public function test_patching_with_a_fetched_record_sends_everything_it_carries(): void
+    {
+        $fetched = DnsRecord::fromArray($this->row(['comment' => 'why this exists', 'tags' => ['production']]));
+
+        $this->client->pushJson(200, $this->envelope($this->row()));
+        $this->cloudflare()->records()->patch(self::ZONE_ID, self::RECORD_ID, $fetched);
+
+        $body = $this->sentBody();
+
+        $this->assertSame('203.0.113.10', $body['content']);
+        $this->assertSame(3600, $body['ttl']);
+        $this->assertSame('why this exists', $body['comment']);
+        $this->assertSame(['production'], $body['tags']);
+    }
+
+    /**
      * The two verbs are not interchangeable on this API and the difference is destructive:
      * a PUT resets every field it does not carry.
      */

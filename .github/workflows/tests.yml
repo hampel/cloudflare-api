@@ -58,45 +58,50 @@ jobs:
         with:
           php-version: '8.3'
           coverage: none
+          # Both are dev dependencies the --no-dev install below deletes, so both have to
+          # come from outside the package. Taking them from setup-php rather than installing
+          # them into a scratch directory is not only shorter: it puts the binaries outside
+          # every vendor tree, and for PHPStan that is load-bearing. Run through a Composer
+          # proxy - anyone's, including a scratch install's own - PHPStan picks up the
+          # autoloader beside it, and every package THAT tree has installed then resolves in
+          # the code being analysed. The check passes on exactly the class it exists to catch
+          # and prints "[OK] No errors" doing it.
+          tools: phpstan, composer-require-checker
 
-      # Two checks here, and they catch different things. This one needs the dev
-      # dependencies PRESENT, so it goes first: composer-require-checker maps every symbol
-      # src/ uses back to the package that provides it, and a package that is not installed
-      # cannot be mapped. It is the only half that sees a TRANSITIVE dependency - one
-      # arriving through something we did declare, which survives --no-dev and so reports
-      # clean below - and the only half that sees a missing ext-*, which is invisible to
-      # static analysis because a function from an absent extension looks exactly like one
-      # from core. ext-ctype and ext-json are declared here for precisely that reason, and
+      # Two checks here and they catch different things, so the order is chosen to let one
+      # install serve both.
+      #
+      # composer-require-checker first, against the full tree. It maps every symbol src/ uses
+      # back to the package that provides it, and it is the only half that sees a TRANSITIVE
+      # dependency - one arriving through something we did declare, which survives --no-dev
+      # and so reports clean below - and the only half that sees a missing ext-*, which is
+      # invisible to static analysis because a function from an absent extension looks exactly
+      # like one from core. ext-ctype and ext-json are declared for precisely that reason, and
       # nothing but this job would notice if one went missing.
+      #
+      # What is installed does not change its answer - it builds its known-symbol set from
+      # what "require" NAMES, not from what is on disk - so this could equally run against the
+      # stripped tree. It runs here because the install is needed anyway.
       - run: composer install --prefer-dist --no-progress
 
-      # Same shape as the phpstan step below, and the same trap: composer -d does not
-      # create the directory.
-      - run: |
-          mkdir -p /tmp/crc
-          composer -d /tmp/crc require maglnet/composer-require-checker --no-progress
-          /tmp/crc/vendor/bin/composer-require-checker check composer.json
+      - run: composer-require-checker check composer.json
 
-      # Now analyse src/ with the dev dependencies gone, so anything it calls that is not in
-      # "require" comes back as not-found. A normal PHPStan run has guzzle and phpunit
-      # installed and sees nothing wrong, and the package would fatal for the consumer
-      # instead. It matters here more than most - the whole point of this package is that it
-      # needs four PSR interfaces and nothing else.
+      # Now take the dev dependencies away and analyse src/ against what a consumer actually
+      # gets, so anything it calls that is not in "require" comes back as not-found. A normal
+      # PHPStan run has Guzzle and PHPUnit installed and sees nothing wrong; the package would
+      # fatal for the consumer instead. It matters here more than most, the whole point of
+      # this package being that it needs four PSR interfaces and nothing else.
+      #
+      # This half is meaningful only because src/ is classes. PHPStan skips the body of a
+      # trait no analysed class uses, so on a package whose src/ is traits this step would
+      # report success over code it never read.
       - run: composer install --no-dev --prefer-dist --no-progress
 
-      # PHPStan is itself a dev dependency, so --no-dev just deleted it. It has to come
-      # from outside the package. composer -d does not create the directory, so mkdir
-      # first or the step dies with "Invalid working directory specified".
-      - run: |
-          mkdir -p /tmp/phpstan
-          composer -d /tmp/phpstan require phpstan/phpstan --no-progress
-
-      # -c is not optional. Without it PHPStan discovers the package's own phpstan.neon,
+      # -c is not optional. Without it PHPStan discovers the package's own phpstan.neon.dist,
       # which points at tests/ and can no longer resolve PHPUnit - turning the run into a
       # configuration error while you are trying to read it as a dependency result.
       - run: >
-          /tmp/phpstan/vendor/bin/phpstan analyse
-          -c .github/phpstan-nodev.neon
+          phpstan analyse -c .github/phpstan-nodev.neon
           --autoload-file=vendor/autoload.php --no-progress
 
   lint:

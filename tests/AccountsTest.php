@@ -72,7 +72,7 @@ final class AccountsTest extends TestCase
     }
 
     /**
-     * The shape a zone-scoped token actually gets, measured on 12 September 2026: a 200 and an
+     * The shape a zone-scoped token actually gets, measured on 2026-09-12: a 200 and an
      * empty collection rather than a refusal. It reads as "this user has no accounts", which
      * is never true - it means the token's resources include none.
      */

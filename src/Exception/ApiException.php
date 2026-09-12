@@ -201,7 +201,7 @@ abstract class ApiException extends CloudflareException
      * which - unlike some APIs that send one on every response - makes its presence meaningful
      * on its own.
      *
-     * Half measured: it was absent from every successful response on 12 September 2026, which
+     * Half measured: it was absent from every successful response on 2026-09-12, which
      * is consistent. A 429 was not provoked, so the value carried on one is still the
      * documentation's word rather than an observation.
      */

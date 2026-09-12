@@ -66,7 +66,7 @@ if ($token->expiresWithinDays(30)) {
 $io->line();
 
 // The rate limit headers are sent per ENDPOINT, not on every response: measured on
-// 12 September 2026, /zones carries them and this endpoint does not. Both are printed, which
+// 2026-09-12, /zones carries them and this endpoint does not. Both are printed, which
 // is why there are two blocks rather than one.
 $meta = $token->meta;
 

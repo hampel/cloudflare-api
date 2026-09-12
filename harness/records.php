@@ -9,7 +9,7 @@
  * demonstrated by a mocked test at all, because what makes PUT dangerous is what the SERVER
  * does with the fields you left out.
  *
- * IT HAS BEEN RUN. Against a live Free-plan zone on 12 September 2026, and it settled the
+ * IT HAS BEEN RUN. Against a live Free-plan zone on 2026-09-12, and it settled the
  * question: the PATCH left the comment alone, and the PUT - carrying only type, name and
  * content - cleared the comment and returned the TTL to automatic, with a 200 and no mention
  * of either. It also turned up that tags need a paid plan.

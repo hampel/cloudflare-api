@@ -15,7 +15,7 @@ use Hampel\Cloudflare\Api\Result\Page;
  * https://developers.cloudflare.com/api/resources/accounts/
  *
  * A ZONE-SCOPED TOKEN IS NOT REFUSED HERE - IT IS ANSWERED WITH NOTHING. Measured on
- * 12 September 2026: a token holding only zone permissions calls this successfully and gets
+ * 2026-09-12: a token holding only zone permissions calls this successfully and gets
  * `200` with an empty collection and a `total_count` of 0. No 403, no error code.
  *
  * That is the trap this class documents. An empty list reads as "this user has no accounts",
@@ -103,7 +103,7 @@ final class Accounts extends Endpoint
      *
      * For a diagnostic reporting as much as it can. Both "the token may not read accounts"
      * and "it can, and the list came back empty" return null, because for this purpose they
-     * are the same answer: nothing to report. On the evidence of 12 September 2026 the second
+     * are the same answer: nothing to report. On the evidence of 2026-09-12 the second
      * is much the likelier of the two - see the note on this class. Anything needing to tell
      * them apart should call list() and catch NotPermittedException itself.
      */

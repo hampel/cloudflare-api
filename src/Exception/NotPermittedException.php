@@ -17,7 +17,7 @@ namespace Hampel\Cloudflare\Api\Exception;
  * why the endpoints that can degrade gracefully do so rather than making a caller guess.
  *
  * THE CODE SEPARATES TWO VERY DIFFERENT 403s, and it is the only thing that does. Measured on
- * 12 September 2026:
+ * 2026-09-12:
  *
  *   9109  "Invalid zone identifier" - the zone id is unknown or belongs to someone else.
  *         Absence, wearing a 403. Zones::find() treats it as such.

@@ -15,7 +15,7 @@ namespace Hampel\Cloudflare\Api\Exception;
  * `403 {"code": 9109, "message": "Invalid zone identifier"}`, so it arrives as
  * NotPermittedException - which is correct of it, since a 404 would confirm to a credential
  * which zone ids exist, and is worth knowing before concluding a zone was deleted. Measured
- * on 12 September 2026. Zones::find() absorbs that specific code; see it for why only that
+ * on 2026-09-12. Zones::find() absorbs that specific code; see it for why only that
  * one.
  *
  * A MALFORMED ID IS A THIRD ANSWER AGAIN: `400 {"code": 7000, "message": "No route for that

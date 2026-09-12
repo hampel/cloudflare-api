@@ -85,7 +85,7 @@ final class Zones extends Endpoint
      * One zone by id.
      *
      * RAISES NotPermittedException FOR A ZONE THAT IS NOT THERE, not NotFoundException.
-     * Measured against the live API on 12 September 2026: an unknown zone id answers
+     * Measured against the live API on 2026-09-12: an unknown zone id answers
      * `403 {"code": 9109, "message": "Invalid zone identifier"}`. That is deliberate of
      * Cloudflare - answering 404 would confirm to a credential which zone ids exist - and it
      * means "no such zone" and "not your zone" are genuinely the same reply. find() is the

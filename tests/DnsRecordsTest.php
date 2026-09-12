@@ -225,7 +225,7 @@ final class DnsRecordsTest extends TestCase
 
     /**
      * A record and a zone disagree about which status means absence, and both were measured on
-     * 12 September 2026: a missing record is `404 / 81044`, a missing zone is `403 / 9109`.
+     * 2026-09-12: a missing record is `404 / 81044`, a missing zone is `403 / 9109`.
      */
     public function test_find_returns_null_for_a_record_that_is_not_there(): void
     {

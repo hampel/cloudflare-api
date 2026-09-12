@@ -135,7 +135,7 @@ final class ZonesTest extends TestCase
     }
 
     /**
-     * Measured on 12 September 2026: an unknown zone id is a 403 carrying code 9109, not a
+     * Measured on 2026-09-12: an unknown zone id is a 403 carrying code 9109, not a
      * 404. find() has to absorb that or it raises for the commonest case it exists to handle.
      */
     public function test_find_returns_null_for_the_403_cloudflare_uses_to_mean_no_such_zone(): void

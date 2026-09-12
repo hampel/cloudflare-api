@@ -17,7 +17,7 @@ use Psr\Http\Message\ResponseInterface;
  * looking for the header is otherwise the natural first move.
  *
  * THE RATE LIMIT HEADERS ARE SENT PER ENDPOINT, NOT ON EVERY RESPONSE. Measured on
- * 12 September 2026: `GET /zones` carries `Ratelimit: "list_zones";r=1200;t=1` and
+ * 2026-09-12: `GET /zones` carries `Ratelimit: "list_zones";r=1200;t=1` and
  * `Ratelimit-Policy: "list_zones";q=1201;w=300`, while `GET /user/tokens/verify` carries
  * neither. The policy is named after the endpoint, so the budget is per operation rather than
  * one figure for the account, and reading a limit from one endpoint tells you nothing about

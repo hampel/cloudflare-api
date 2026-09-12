@@ -177,7 +177,7 @@ DnsRecord::components(RecordType::TLSA, $name, [...]);    // any other data type
 Then refine:
 
 ```php
-$record->withTtl(3600)->withComment('why this exists')->withTags(['production']);
+$record->withTtl(3600)->withComment('why this exists')->withTags(['production']);  // tags need a paid plan
 $record->proxy();     // A, AAAA and CNAME only
 $record->unproxy();
 ```
@@ -203,6 +203,10 @@ An SRV record's service and protocol go in its **name**, decorated: `_sip._tcp.e
 must be 60 to 86400 (30 on Enterprise zones), and is checked before the request is sent.
 
 A proxied record has no TTL of its own; Cloudflare forces automatic.
+
+Tags are a paid feature. On a Free zone the quota is zero and a record carrying one is refused
+with code `9300`, whose message — "exceeding the quota of 0" — reads like a complaint about
+the request rather than about the plan.
 
 ```php
 Ttl::effective($record->ttl);   // 300 for automatic
@@ -231,8 +235,8 @@ $records->all($query);
 does the same for tag conditions, which combine separately.
 
 An unrecognised filter is not an error on this API — it is ignored, and the whole collection
-comes back with a 200. `RecordQuery` refuses an empty condition value and an unorderable field
-for that reason.
+comes back with a 200. Measured: `?no_such_filter=x` against a zone returned every record in
+it. `RecordQuery` refuses an empty condition value and an unorderable field for that reason.
 
 ## Pagination
 
@@ -265,7 +269,7 @@ Every exception implements `Hampel\Cloudflare\Api\Exception\ExceptionInterface`.
 | `ValidationException` | 400 — a value was rejected |
 | `NotAuthenticatedException` | 401, or error code 1000 — the token is missing, wrong or revoked |
 | `NotPermittedException` | 403 — the token lacks a permission or the resource is outside it |
-| `NotFoundException` | 404 — no such thing, or not visible to this token |
+| `NotFoundException` | 404 — no such DNS record, or no such path |
 | `ConflictException` | 409 — a record that cannot coexist with what is there |
 | `TooManyRequestsException` | 429 |
 | `ServerException` | 5xx |
@@ -290,6 +294,24 @@ catch (ValidationException $e) {
 Branch on `hasCode()` rather than on a message. The codes are documented and stable; the
 messages are prose.
 
+### Absence is reported three different ways
+
+Measured against the live API:
+
+| | |
+|---|---|
+| a DNS record that does not exist | `404`, code `81044` |
+| a zone that does not exist, or is not yours | `403`, code `9109` |
+| an id that is not even the right shape | `400`, code `7000` |
+
+So a missing zone arrives as `NotPermittedException`, not `NotFoundException` — Cloudflare
+will not confirm which zone ids exist to a credential that cannot see them.
+
+`Zones::find()` absorbs the `9109` case and returns `null`. It does **not** absorb a 403
+carrying code `10000` — "Authentication error", a token whose permissions or resources do not
+cover the zone — because reporting a misconfigured credential as "the zone does not exist"
+sends whoever chases it to the wrong place.
+
 ### `success: false` on a 200
 
 This API carries its own success flag, and a 2xx whose body says `"success": false` is a real
@@ -303,6 +325,11 @@ maintenance page or proxy error document becomes an empty array, which reaches t
 
 1200 requests per five minutes. Exceeding it blocks every call for the next five minutes,
 not only the one that went over.
+
+**The headers are sent per endpoint, not on every response.** `GET /zones` carries
+`Ratelimit: "list_zones";r=1200;t=1` and `Ratelimit-Policy: "list_zones";q=1201;w=300`;
+`GET /user/tokens/verify` carries neither. The policy is named after the operation, so a
+limit read from one endpoint says nothing about another.
 
 ```php
 $meta = $response->meta;

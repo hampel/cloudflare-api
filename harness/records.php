@@ -9,6 +9,11 @@
  * demonstrated by a mocked test at all, because what makes PUT dangerous is what the SERVER
  * does with the fields you left out.
  *
+ * IT HAS BEEN RUN. Against a live Free-plan zone on 12 September 2026, and it settled the
+ * question: the PATCH left the comment alone, and the PUT - carrying only type, name and
+ * content - cleared the comment and returned the TTL to automatic, with a 200 and no mention
+ * of either. It also turned up that tags need a paid plan.
+ *
  * WHAT IT DOES. One TXT record, named zz-delete-me-cloudflare-api-harness-<timestamp> in
  * CLOUDFLARE_DOMAIN. It is created, read back, patched, replaced, and deleted in a `finally`
  * so it goes even if a step fails. A record in a live zone is served to the whole internet
@@ -30,6 +35,7 @@
  */
 
 use Hampel\Cloudflare\Api\Entity\DnsRecord;
+use Hampel\Cloudflare\Api\Exception\ApiException;
 use Hampel\Cloudflare\Api\Exception\NotPermittedException;
 use Hampel\Cloudflare\Api\Support\Ttl;
 
@@ -75,16 +81,27 @@ $created = null;
 try {
     $io->info('1. create');
 
+    // NO TAGS HERE, and that is a finding rather than an oversight: tags are a paid feature.
+    // On a Free zone the quota is zero and a create carrying one is refused with
+    // `400 / 9300 - DNS record has 1 tags, exceeding the quota of 0`. Step 2 asks for one
+    // separately, so a plan that allows them still gets exercised and one that does not
+    // reports the fact instead of failing the run.
     try {
         $created = $records->create(
             DnsRecord::txt($name, 'created by the hampel/cloudflare-api harness')
                 ->withTtl(120)
                 ->withComment('throwaway - safe to delete')
-                ->withTags(['harness'])
         );
     } catch (NotPermittedException $e) {
         $io->error('    refused: this token cannot write DNS. It needs DNS:Edit on this zone.');
         $io->value('    message', $e->getMessage());
+
+        exit(1);
+    } catch (ApiException $e) {
+        $io->error('    the create was rejected, so there is nothing to exercise.');
+        $io->value('    status', (string) $e->statusCode);
+        $io->value('    codes', implode(', ', array_map('strval', $e->codes())));
+        $io->value('    message', implode('; ', $e->messages()));
 
         exit(1);
     }
@@ -92,7 +109,6 @@ try {
     $io->line(sprintf('    %-16s %s', 'id', $created->id ?? '?'));
     $io->line(sprintf('    %-16s %s', 'ttl', Ttl::describe($created->ttl ?? Ttl::AUTOMATIC)));
     $io->line(sprintf('    %-16s %s', 'comment', $created->comment ?? '(none)'));
-    $io->line(sprintf('    %-16s %s', 'tags', implode(', ', $created->tags) ?: '(none)'));
 
     $recordId = $created->id;
 
@@ -103,7 +119,25 @@ try {
     }
 
     $io->line();
-    $io->info('2. read it back');
+    $io->info('2. tags - a paid feature, so this is allowed to fail');
+
+    if ($created->id !== null) {
+        try {
+            $tagged = $records->patch($created->id, ['tags' => ['harness']]);
+            $io->success(sprintf('    tags accepted: %s', implode(', ', $tagged->tags) ?: '(none returned)'));
+        } catch (ApiException $e) {
+            $io->info(sprintf(
+                '    refused (%d / %s): %s',
+                $e->statusCode,
+                implode(',', array_map('strval', $e->codes())),
+                implode('; ', $e->messages())
+            ));
+            $io->info('    That is the zone\'s plan, not the token or the package.');
+        }
+    }
+
+    $io->line();
+    $io->info('3. read it back');
 
     $fetched = $records->get($recordId);
     $io->line(sprintf('    %s', $fetched->describe()));
@@ -114,7 +148,7 @@ try {
     $io->line(sprintf('    %-16s %s', 'content stored', (string) $fetched->content));
 
     $io->line();
-    $io->info('3. patch - changes the TTL and leaves everything else alone');
+    $io->info('4. patch - changes the TTL and leaves everything else alone');
 
     $patched = $records->patch($recordId, ['ttl' => 300]);
 
@@ -122,14 +156,14 @@ try {
     $io->line(sprintf('    %-16s %s', 'comment', $patched->comment ?? '(GONE)'));
     $io->line(sprintf('    %-16s %s', 'tags', implode(', ', $patched->tags) ?: '(GONE)'));
 
-    if ($patched->comment !== null && $patched->tags !== []) {
-        $io->success('    the comment and tags survived, which is what PATCH promises');
+    if ($patched->comment !== null) {
+        $io->success('    the comment survived, which is what PATCH promises');
     } else {
-        $io->warn('    the comment or tags did NOT survive a PATCH - that would contradict the docs');
+        $io->warn('    the comment did NOT survive a PATCH - that would contradict the docs');
     }
 
     $io->line();
-    $io->info('4. replace - a PUT carrying only type, name and content');
+    $io->info('5. replace - a PUT carrying only type, name and content');
 
     // THE DEMONSTRATION. Nothing about this call mentions the comment, the tags or the TTL.
     // A partial update would leave all three; a replacement resets them, silently, with a 200.
@@ -144,15 +178,17 @@ try {
     $io->line(sprintf('    %-16s %s', 'comment', $replaced->comment ?? '(GONE)'));
     $io->line(sprintf('    %-16s %s', 'tags', implode(', ', $replaced->tags) ?: '(GONE)'));
 
-    if ($replaced->comment === null && $replaced->tags === []) {
-        $io->success('    the comment and tags are gone - nothing in the payload mentioned them, and');
-        $io->success('    the call answered 200. This is why replace() is not the default update.');
+    if ($replaced->comment === null || $replaced->comment === '') {
+        $io->success('    the comment is GONE - nothing in the payload mentioned it, the TTL went back');
+        $io->success('    to automatic, and the call answered 200 saying none of it. This is why');
+        $io->success('    replace() is not the default update.');
     } else {
-        $io->warn('    they survived a PUT, which contradicts the documented behaviour. Worth chasing.');
+        $io->warn('    the comment survived a PUT, which contradicts the documented behaviour.');
+        $io->warn('    Worth chasing - patch() and replace() may not differ as this package claims.');
     }
 } finally {
     $io->line();
-    $io->info('5. delete');
+    $io->info('6. delete');
 
     if ($created?->id === null) {
         $io->line('    nothing was created, so there is nothing to remove.');

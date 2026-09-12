@@ -67,7 +67,13 @@ reason as above.
 **Permissions are published nowhere.** No endpoint and no header reports what a token may do.
 Verification says the credential is real and live and nothing more; anything that wants to
 know what it reaches has to try. `Accounts::first()` degrades rather than raising for this
-reason.
+reason — and note that a zone-scoped token is not refused by `/accounts` at all, it is
+answered with an empty collection.
+
+**Absence has three shapes**, and they are measured rather than assumed: a missing DNS record
+is `404 / 81044`, a missing or invisible zone is `403 / 9109`, and a malformed id is
+`400 / 7000`. `Zones::find()` therefore catches a specific 403 code — and deliberately not
+`403 / 10000`, which is a permissions failure and must keep raising.
 
 **TTL 1 is "automatic", served as 300 seconds.** Not one second. `Ttl` carries the rules.
 
@@ -97,6 +103,11 @@ the real API.
 | `export` | the BIND zone file, and why its line count exceeds the record count |
 | `errors` | each failure branch against the live API |
 | `records` | the full lifecycle. **Writes to real DNS**, and is opt-in twice over |
+
+The harness has been run against a live Free-plan zone. It is what established the measured
+facts above, and it corrected three docblocks and one real bug — `Zones::find()` raised for
+the commonest case it exists to handle, because the zone endpoint reports absence with a 403.
+Run `verify`, `zones`, `export` and `errors` (all read-only) before `records`.
 
 `records` needs `CLOUDFLARE_WRITE_RECORDS=yes`, and under an agent also
 `CLOUDFLARE_AGENT_MAY_WRITE_RECORDS=1` on the command line. The second exists because the

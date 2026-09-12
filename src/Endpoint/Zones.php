@@ -7,6 +7,8 @@ namespace Hampel\Cloudflare\Api\Endpoint;
 use Hampel\Cloudflare\Api\Entity\Zone;
 use Hampel\Cloudflare\Api\Enum\ZoneStatus;
 use Hampel\Cloudflare\Api\Exception\InvalidArgumentException;
+use Hampel\Cloudflare\Api\Exception\NotFoundException;
+use Hampel\Cloudflare\Api\Exception\NotPermittedException;
 use Hampel\Cloudflare\Api\Result\Page;
 
 /**
@@ -38,6 +40,12 @@ final class Zones extends Endpoint
      * The API's own default when a request does not ask for a size.
      */
     public const DEFAULT_PAGE_SIZE = 20;
+
+    /**
+     * What Cloudflare answers, inside a 403, for a zone id this token cannot address -
+     * whether because no such zone exists or because it belongs to somebody else.
+     */
+    public const CODE_INVALID_ZONE_IDENTIFIER = 9109;
 
     /**
      * One page of the account's zones.
@@ -74,8 +82,14 @@ final class Zones extends Endpoint
     }
 
     /**
-     * One zone by id. Raises NotFoundException when there is no such zone, or when this token
-     * may not see it - Cloudflare does not distinguish the two, and neither can this.
+     * One zone by id.
+     *
+     * RAISES NotPermittedException FOR A ZONE THAT IS NOT THERE, not NotFoundException.
+     * Measured against the live API on 12 September 2026: an unknown zone id answers
+     * `403 {"code": 9109, "message": "Invalid zone identifier"}`. That is deliberate of
+     * Cloudflare - answering 404 would confirm to a credential which zone ids exist - and it
+     * means "no such zone" and "not your zone" are genuinely the same reply. find() is the
+     * method that treats it as an ordinary answer.
      */
     public function get(string $zoneId): Zone
     {
@@ -83,11 +97,32 @@ final class Zones extends Endpoint
     }
 
     /**
-     * One zone by id, or null when it is not there.
+     * One zone by id, or null when this token cannot address it.
+     *
+     * The 403 described on get() is absorbed here, but ONLY when it carries code 9109. A 403
+     * for any other reason still raises, and the distinction earns its keep: a token whose
+     * permissions are wrong reports `10000, Authentication error` - measured on the same day,
+     * by listing the records of a zone outside the token's resources - and silently returning
+     * null for that would turn a misconfigured credential into "the zone does not exist",
+     * which sends whoever reads it to the wrong dashboard.
+     *
+     * The 404 branch is kept because it costs nothing and the API's shape here is not a
+     * promise: a record id that does not exist DOES answer 404, so the two id types in this
+     * package already disagree about which status means absence.
      */
     public function find(string $zoneId): ?Zone
     {
-        return $this->apiFind($this->path($zoneId), Zone::fromArray(...));
+        try {
+            return $this->get($zoneId);
+        } catch (NotFoundException) {
+            return null;
+        } catch (NotPermittedException $e) {
+            if (!$e->hasCode(self::CODE_INVALID_ZONE_IDENTIFIER)) {
+                throw $e;
+            }
+
+            return null;
+        }
     }
 
     /**

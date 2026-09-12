@@ -42,5 +42,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   records, 5–50 for zones and accounts.
 - Booleans are written into the query string as `true`/`false`. An unreadable filter is not
   an error on this API — it is ignored, and the whole collection comes back with a 200.
-- The rate limit headers are parsed from their documented form. Whether they are present on
-  an ordinary response is unverified; the `verify` exercise prints the raw headers.
+- The rate limit headers are sent per endpoint rather than on every response: `GET /zones`
+  carries them, `GET /user/tokens/verify` does not.
+- Absence has three shapes. A missing DNS record is `404 / 81044`; a missing or invisible zone
+  is `403 / 9109`, so it arrives as `NotPermittedException`; a malformed id is `400 / 7000`.
+  `Zones::find()` absorbs `9109` only, leaving a genuine permissions failure (`403 / 10000`)
+  to raise.
+- A zone-scoped token is not refused by `/accounts` - it gets a 200 and an empty collection,
+  which says something about the credential and nothing about the account.
+- Record tags need a paid plan. On a Free zone the quota is zero and code `9300` is returned.
+
+All of the above were measured against the live API on 12 September 2026, along with the
+`replace()`/`patch()` difference and the ignored-filter behaviour, using the harness.

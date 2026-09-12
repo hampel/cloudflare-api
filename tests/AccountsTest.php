@@ -71,11 +71,22 @@ final class AccountsTest extends TestCase
         $this->cloudflare()->accounts()->list();
     }
 
-    public function test_first_returns_null_when_the_token_can_read_accounts_and_there_are_none(): void
+    /**
+     * The shape a zone-scoped token actually gets, measured on 12 September 2026: a 200 and an
+     * empty collection rather than a refusal. It reads as "this user has no accounts", which
+     * is never true - it means the token's resources include none.
+     */
+    public function test_an_empty_list_is_what_a_zone_scoped_token_gets_rather_than_a_refusal(): void
     {
         $this->client->pushJson(200, $this->collection([], perPage: 5));
 
         $this->assertNull($this->cloudflare()->accounts()->first());
+
+        $this->client->pushJson(200, $this->collection([], perPage: 5));
+        $page = $this->cloudflare()->accounts()->list(1, 5);
+
+        $this->assertSame(0, $page->total());
+        $this->assertTrue($page->isEmpty());
     }
 
     public function test_find_absorbs_both_absence_and_refusal(): void

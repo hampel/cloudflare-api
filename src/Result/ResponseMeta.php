@@ -16,12 +16,19 @@ use Psr\Http\Message\ResponseInterface;
  * That absence is worth stating in the one class whose job is "what else came back", because
  * looking for the header is otherwise the natural first move.
  *
- * THE RATE LIMIT HEADERS ARE DOCUMENTED RATHER THAN MEASURED. Cloudflare documents
- * `Ratelimit` and `Ratelimit-Policy` in the draft IETF form - `"default";r=50;t=30` - and
- * this parses that. No token was available when this was written, so whether they appear on
- * every response, on some endpoints only, or not at all through a proxy is unverified; the
- * `verify` harness exercise prints the raw headers and settles it on the first real run.
- * Everything here reads a missing header as "unknown", never as "exhausted".
+ * THE RATE LIMIT HEADERS ARE SENT PER ENDPOINT, NOT ON EVERY RESPONSE. Measured on
+ * 12 September 2026: `GET /zones` carries `Ratelimit: "list_zones";r=1200;t=1` and
+ * `Ratelimit-Policy: "list_zones";q=1201;w=300`, while `GET /user/tokens/verify` carries
+ * neither. The policy is named after the endpoint, so the budget is per operation rather than
+ * one figure for the account, and reading a limit from one endpoint tells you nothing about
+ * another.
+ *
+ * That is why every accessor here is nullable and why isNearingRateLimit() answers false when
+ * it knows nothing. A missing header means the question was not answered - it is not evidence
+ * of exhaustion, and treating it as such would stop a client whose only problem is that it
+ * asked a different endpoint, or that a proxy stripped them.
+ *
+ * `CF-Ray` was present on everything measured, including responses carrying no rate limit.
  */
 final class ResponseMeta implements \JsonSerializable
 {

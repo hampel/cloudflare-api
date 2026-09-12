@@ -9,7 +9,8 @@ use Hampel\Cloudflare\Api\Entity\Zone;
 use Hampel\Cloudflare\Api\Enum\ZoneStatus;
 use Hampel\Cloudflare\Api\Enum\ZoneType;
 use Hampel\Cloudflare\Api\Exception\InvalidArgumentException;
-use Hampel\Cloudflare\Api\Exception\NotFoundException;
+use Hampel\Cloudflare\Api\Endpoint\Zones;
+use Hampel\Cloudflare\Api\Exception\NotPermittedException;
 
 final class ZonesTest extends TestCase
 {
@@ -133,18 +134,52 @@ final class ZonesTest extends TestCase
         $this->assertSame('2014-01-01', $zone->createdOn?->format('Y-m-d'));
     }
 
-    public function test_find_returns_null_for_a_zone_that_is_not_there(): void
+    /**
+     * Measured on 12 September 2026: an unknown zone id is a 403 carrying code 9109, not a
+     * 404. find() has to absorb that or it raises for the commonest case it exists to handle.
+     */
+    public function test_find_returns_null_for_the_403_cloudflare_uses_to_mean_no_such_zone(): void
     {
-        $this->client->pushJson(404, $this->failure([['code' => 1049, 'message' => 'Invalid zone identifier']]));
+        $this->client->pushJson(403, $this->failure([
+            ['code' => Zones::CODE_INVALID_ZONE_IDENTIFIER, 'message' => 'Invalid zone identifier'],
+        ]));
+
+        $this->assertNull($this->cloudflare()->zones()->find(self::ZONE_ID));
+    }
+
+    /**
+     * The other 403 - code 10000, a token whose permissions or resources do not cover this -
+     * must still raise. Absorbed, a misconfigured credential would read as "the zone does not
+     * exist" and send whoever chased it to the wrong dashboard.
+     */
+    public function test_find_still_raises_for_a_403_that_is_a_permissions_problem(): void
+    {
+        $this->client->pushJson(403, $this->failure([
+            ['code' => 10000, 'message' => 'Authentication error'],
+        ]));
+
+        try {
+            $this->cloudflare()->zones()->find(self::ZONE_ID);
+            $this->fail('a permissions failure was absorbed as absence');
+        } catch (NotPermittedException $e) {
+            $this->assertTrue($e->hasCode(10000));
+        }
+    }
+
+    public function test_find_also_absorbs_a_404_for_the_endpoints_that_answer_with_one(): void
+    {
+        $this->client->pushJson(404, $this->failure([['code' => 7003, 'message' => 'Could not route']]));
 
         $this->assertNull($this->cloudflare()->zones()->find(self::ZONE_ID));
     }
 
     public function test_get_raises_for_a_zone_that_is_not_there(): void
     {
-        $this->client->pushJson(404, $this->failure([['code' => 1049, 'message' => 'Invalid zone identifier']]));
+        $this->client->pushJson(403, $this->failure([
+            ['code' => Zones::CODE_INVALID_ZONE_IDENTIFIER, 'message' => 'Invalid zone identifier'],
+        ]));
 
-        $this->expectException(NotFoundException::class);
+        $this->expectException(NotPermittedException::class);
 
         $this->cloudflare()->zones()->get(self::ZONE_ID);
     }

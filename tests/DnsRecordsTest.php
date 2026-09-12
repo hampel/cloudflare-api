@@ -223,11 +223,28 @@ final class DnsRecordsTest extends TestCase
         $this->cloudflare()->records()->delete(self::ZONE_ID, self::RECORD_ID);
     }
 
+    /**
+     * A record and a zone disagree about which status means absence, and both were measured on
+     * 12 September 2026: a missing record is `404 / 81044`, a missing zone is `403 / 9109`.
+     */
     public function test_find_returns_null_for_a_record_that_is_not_there(): void
     {
         $this->client->pushJson(404, $this->failure([['code' => 81044, 'message' => 'Record does not exist.']]));
 
         $this->assertNull($this->cloudflare()->records()->find(self::ZONE_ID, self::RECORD_ID));
+    }
+
+    /**
+     * A malformed id never matches a route, so it is a 400 rather than absence - and is not
+     * absorbed, a malformed id being a bug rather than a thing that is missing.
+     */
+    public function test_a_malformed_record_id_is_a_failure_rather_than_an_absence(): void
+    {
+        $this->client->pushJson(400, $this->failure([['code' => 7000, 'message' => 'No route for that URI']]));
+
+        $this->expectException(\Hampel\Cloudflare\Api\Exception\ValidationException::class);
+
+        $this->cloudflare()->records()->find(self::ZONE_ID, 'not-a-real-id');
     }
 
     /**

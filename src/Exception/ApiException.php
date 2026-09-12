@@ -171,10 +171,13 @@ abstract class ApiException extends CloudflareException
     /**
      * Seconds to wait, from `Retry-After`.
      *
-     * Cloudflare documents this header as sent only when a limit has actually been
-     * exceeded, which - unlike some APIs - makes its presence meaningful on its own. That is
-     * documented rather than measured here; the `verify` harness exercise prints what a real
-     * response carries.
+     * Cloudflare documents this header as sent only when a limit has actually been exceeded,
+     * which - unlike some APIs that send one on every response - makes its presence meaningful
+     * on its own.
+     *
+     * Half measured: it was absent from every successful response on 12 September 2026, which
+     * is consistent. A 429 was not provoked, so the value carried on one is still the
+     * documentation's word rather than an observation.
      */
     private static function retryAfter(ResponseInterface $response): ?int
     {

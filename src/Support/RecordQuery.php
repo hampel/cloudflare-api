@@ -14,8 +14,11 @@ use Hampel\Cloudflare\Api\Exception\InvalidArgumentException;
  * query parameters, and the expressive part is in their names: every text field takes four
  * predicates rather than one, written as `name.exact`, `name.contains`, `name.startswith`
  * and `name.endswith`. A dotted parameter name is easy to typo and impossible to notice
- * having typoed - an unrecognised one is ignored, so the request succeeds and returns the
- * unfiltered collection. That is the whole reason this class exists rather than an array.
+ * having typoed - an unrecognised one is IGNORED, so the request succeeds and returns the
+ * unfiltered collection. Measured on 12 September 2026: `?no_such_filter=x` against a zone's
+ * records answered 200 with every record in it. That is the whole reason this class exists
+ * rather than an array - the failure has no error to catch, and whatever walks the result and
+ * deletes what it finds has just been handed the entire zone.
  *
  *     $query = RecordQuery::make()
  *         ->type(RecordType::A)

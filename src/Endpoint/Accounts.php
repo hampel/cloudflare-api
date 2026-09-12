@@ -14,14 +14,24 @@ use Hampel\Cloudflare\Api\Result\Page;
  *
  * https://developers.cloudflare.com/api/resources/accounts/
  *
- * NEEDS `Account Settings:Read`, WHICH A DNS TOKEN WILL NOT HAVE - and that is correct rather
- * than a limitation to work around. A credential that manages one zone's DNS has no business
- * enumerating the account it sits in, and a zone-scoped token is refused here.
+ * A ZONE-SCOPED TOKEN IS NOT REFUSED HERE - IT IS ANSWERED WITH NOTHING. Measured on
+ * 12 September 2026: a token holding only zone permissions calls this successfully and gets
+ * `200` with an empty collection and a `total_count` of 0. No 403, no error code.
  *
- * So this is for diagnostics rather than for routine work: it answers "what does this
- * credential actually reach", which on an API that publishes no permissions is the closest
- * thing to a capability report there is. find() and first() absorb the refusal so a
- * diagnostic can report what it can rather than stopping at the first thing it may not see.
+ * That is the trap this class documents. An empty list reads as "this user has no accounts",
+ * which is never true - every zone belongs to one, and the zone payload itself names the
+ * account the token supposedly cannot see. What it actually means is that the token's
+ * resources include no account, so the collection is filtered to nothing. So an empty answer
+ * here says something about the CREDENTIAL and not about the account, and nothing in a
+ * consuming application should conclude otherwise from it.
+ *
+ * The 403 branch is kept because a differently-scoped token may still produce one, and
+ * because absorbing a refusal is what lets a diagnostic report what it can rather than
+ * stopping at the first thing it may not see.
+ *
+ * Either way this is for diagnostics rather than routine work: it answers "what does this
+ * credential actually reach", which on an API that publishes no permissions is as close to a
+ * capability report as there is.
  *
  * PAGE SIZES HERE ARE 5 TO 50, as on zones and unlike DNS records.
  */
@@ -92,9 +102,10 @@ final class Accounts extends Endpoint
      * The first account this token can see, or null when it can see none.
      *
      * For a diagnostic reporting as much as it can. Both "the token may not read accounts"
-     * and "it can, and there are none" come back as null, because for this purpose they are
-     * the same answer: nothing to report. Anything that needs to tell them apart should call
-     * list() and catch NotPermittedException itself.
+     * and "it can, and the list came back empty" return null, because for this purpose they
+     * are the same answer: nothing to report. On the evidence of 12 September 2026 the second
+     * is much the likelier of the two - see the note on this class. Anything needing to tell
+     * them apart should call list() and catch NotPermittedException itself.
      */
     public function first(): ?Account
     {

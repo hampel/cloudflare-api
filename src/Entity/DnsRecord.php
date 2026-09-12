@@ -127,9 +127,13 @@ final class DnsRecord implements \JsonSerializable
      * `"first 255 bytes" "the rest"`. An equality check against the original then fails on a
      * record that is perfectly right.
      *
-     * The same applies to quoting: a value sent unquoted may come back quoted. Compare TXT
-     * content by parsing it, or by asking whether the record resolves, rather than by string
-     * equality with what you submitted.
+     * A SHORT VALUE DOES ROUND-TRIP VERBATIM - measured on 12 September 2026, an unquoted
+     * 43-byte value came back byte-identical. So the rewriting is not something every TXT
+     * record suffers; it is what happens once a value crosses 255 bytes, which is exactly the
+     * case a DKIM key falls into and a verification token does not.
+     *
+     * Compare long TXT content by parsing it, or by asking whether the record resolves, rather
+     * than by string equality with what you submitted.
      */
     public static function txt(string $name, string $value): self
     {
@@ -407,6 +411,18 @@ final class DnsRecord implements \JsonSerializable
     }
 
     /**
+     * Free-form labels. They have no effect on what DNS serves.
+     *
+     * TAGS ARE A PAID FEATURE, and the failure says so obliquely. On a Free zone the quota is
+     * zero, so a record carrying even one is refused with `400 {"code": 9300, "message": "DNS
+     * record has 1 tags, exceeding the quota of 0."}` - measured on 12 September 2026. The
+     * number in that message is the plan's allowance, not a count of anything wrong with the
+     * request, which is easy to read as the opposite of what it means.
+     *
+     * Nothing here checks the plan, because a record cannot know which zone it is destined
+     * for. Where tagging is optional, send the record without tags and add them in a separate
+     * patch that is allowed to fail - the `records` harness exercise does exactly that.
+     *
      * @param  list<string>  $tags
      */
     public function withTags(array $tags): self

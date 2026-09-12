@@ -65,8 +65,9 @@ if ($token->expiresWithinDays(30)) {
 
 $io->line();
 
-// The unsettled question. ResponseMeta parses these headers from their documented form;
-// these two lines are what say whether they are sent at all.
+// The rate limit headers are sent per ENDPOINT, not on every response: measured on
+// 12 September 2026, /zones carries them and this endpoint does not. Both are printed, which
+// is why there are two blocks rather than one.
 $meta = $token->meta;
 
 $io->values([
@@ -87,17 +88,25 @@ $io->info('Cloudflare reports a token\'s permissions nowhere, so what follows is
 $io->info('trying rather than read from a header.');
 $io->line();
 
-// Accounts: a zone-scoped token is refused here, and that is correct rather than a problem.
+// Accounts. A zone-scoped token is NOT refused here - it is answered with an empty list, so
+// "the call worked" and "the token can read accounts" are not the same thing and this must
+// not report them as one.
 try {
     $accounts = $cloudflare->accounts()->list(1, 5);
 
-    $io->success(sprintf('Account Settings:Read — yes (%d visible)', $accounts->total()));
+    if ($accounts->isEmpty()) {
+        $io->info('Accounts — the call succeeded and returned nothing.');
+        $io->info('  That is not "this user has no accounts", which is never true. It means the');
+        $io->info('  token\'s resources include no account, so the collection is filtered to empty.');
+    } else {
+        $io->success(sprintf('Accounts — %d visible', $accounts->total()));
 
-    foreach ($accounts->items as $account) {
-        $io->line(sprintf('    %-34s %s', $account->name, $account->id));
+        foreach ($accounts->items as $account) {
+            $io->line(sprintf('    %-34s %s', $account->name, $account->id));
+        }
     }
 } catch (NotPermittedException) {
-    $io->info('Account Settings:Read — no. Correct for a token that only manages DNS.');
+    $io->info('Accounts — refused outright (403). Correct for a token that only manages DNS.');
 }
 
 $io->line();
@@ -134,6 +143,26 @@ try {
 
     exit(1);
 }
+
+$io->line();
+
+// The same two headers from an endpoint that does send them, so the difference is visible
+// side by side rather than inferred from one absence.
+$zoneMeta = $cloudflare->connection()->get('zones', ['per_page' => 5])->meta;
+
+$io->info('The same headers from GET /zones, which does send them:');
+$io->values([
+    'Ratelimit (raw)' => $zoneMeta->rateLimitHeader === '' ? '(header absent)' : $zoneMeta->rateLimitHeader,
+    'Ratelimit-Policy (raw)' => $zoneMeta->rateLimitPolicyHeader === '' ? '(header absent)' : $zoneMeta->rateLimitPolicyHeader,
+    'parsed as' => sprintf(
+        '%s remaining of %s, resets in %s',
+        $zoneMeta->rateLimitRemaining ?? '?',
+        $zoneMeta->rateLimit ?? '?',
+        $zoneMeta->rateLimitResetsIn === null ? '?' : $zoneMeta->rateLimitResetsIn . 's'
+    ),
+]);
+$io->info('The policy is named after the operation, so the budget is per endpoint rather than');
+$io->info('one figure for the account - a limit read from one says nothing about another.');
 
 $io->line();
 $io->info('DNS:Edit cannot be checked without writing something. The `records` exercise is that check.');

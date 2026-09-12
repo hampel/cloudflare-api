@@ -37,10 +37,18 @@ final class Config
      * @param  string|null  $baseUri  the API root WITHOUT the `/client/v4` segment, e.g.
      *                                `https://api.cloudflare.com`. Null uses Cloudflare's own
      * @param  int|null  $pageSize  how many items a list request asks for when the caller does
-     *                              not say. Null uses each endpoint's own default, which
-     *                              differs between them - 100 for DNS records, 20 for zones
-     *                              and accounts. The endpoints validate this against their own
-     *                              limits, which also differ
+     *                              not say. Null - the default - uses each endpoint's own,
+     *                              which is 100 for DNS records and 20 for zones and accounts
+     *
+     * A GLOBAL PAGE SIZE IS USABLE ONLY BETWEEN 5 AND 50, and null is the better answer for
+     * most applications. The accepted ranges are 1 to 5,000,000 for DNS records and 5 to 50 for
+     * zones and accounts, so they overlap nowhere else: a setting of 100, which is the record
+     * endpoint's own default and looks like a safe choice, is refused outright by the zone and
+     * account endpoints. Each endpoint validates against its own limits before the request is
+     * sent, so the failure is an InvalidArgumentException rather than a wasted round trip - but
+     * it is still a failure at the call site rather than at the line that set the number.
+     *
+     * Pass a size per call instead where one endpoint needs a different one.
      */
     public function __construct(
         ?string $baseUri = null,

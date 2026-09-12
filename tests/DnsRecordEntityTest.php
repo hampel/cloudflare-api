@@ -143,6 +143,22 @@ final class DnsRecordEntityTest extends BaseTestCase
         $this->assertSame(300, $record->effectiveTtl(), 'what it is actually served as');
         $this->assertSame('automatic (300s)', Ttl::describe(1));
         $this->assertTrue(Ttl::isValid(1));
+        $this->assertTrue(Ttl::isAutomatic(1));
+    }
+
+    /**
+     * `1` is the only automatic value, and nothing near it is. 300 is what automatic is SERVED
+     * as, which makes it the value most likely to be mistaken for the flag - a record set to
+     * 300 has a fixed five-minute TTL, and one set to 1 has whatever Cloudflare decides
+     * automatic means.
+     */
+    public function test_only_one_is_automatic(): void
+    {
+        $this->assertTrue(Ttl::isAutomatic(Ttl::AUTOMATIC));
+
+        foreach ([0, 2, 60, 300, Ttl::AUTOMATIC_SECONDS, 3600, 86400] as $ttl) {
+            $this->assertFalse(Ttl::isAutomatic($ttl), $ttl . ' is not the automatic flag');
+        }
     }
 
     public function test_a_record_with_no_ttl_reports_the_automatic_default(): void

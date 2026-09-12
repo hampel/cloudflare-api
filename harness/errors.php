@@ -9,9 +9,15 @@
  * what came back, so the exception mapping is checked against Cloudflare's real behaviour
  * rather than against what the specification says it should be.
  *
- * Two things in this package are honest guesses that only a run like this settles: whether a
- * bad token answers 401 or a 200 with `success: false`, and which numeric codes accompany
- * each. Both are printed.
+ * IT DRIVES BOTH SHAPES OF BAD CREDENTIAL, and that is not padding. Cloudflare refuses a token
+ * two ways - `401` with code 1000 for one of the right shape and the wrong value, `400` with
+ * code 6003 for one it cannot parse - and this exercise tested only the first until 0.1.1. The
+ * bogus token was forty zeros, which is well formed, so the 400 path never ran here and the
+ * mapping for it shipped wrong. A fixture chosen to look realistic is why the realistic failure
+ * went unseen.
+ *
+ * Both must report NotAuthenticatedException. A ValidationException on the second is the 0.1.0
+ * defect returning.
  *
  * Needs CLOUDFLARE_TOKEN. Nothing is written.
  *
@@ -68,8 +74,16 @@ $show = static function (string $what, callable $callback) use ($io): void {
 // A credential that is not one. This is the line that settles whether Cloudflare answers a
 // bad token with a 401 or with a 200 whose body says success: false - the package handles
 // both, and only a run says which actually happens.
-$show('A token that is not a token:', static function () use ($cloudflare): void {
-    $cloudflare->withCredential(new ApiToken('0000000000000000000000000000000000000000'))->verify();
+// Well formed - right length, right charset - and not a real token. Answers 401 / 1000.
+$show('A token of the right shape and the wrong value:', static function () use ($cloudflare): void {
+    $cloudflare->withCredential(new ApiToken(str_repeat('0', 40)))->verify();
+});
+
+// Not a token at all, which is what a placeholder left in config, a truncated value or a stray
+// `Bearer ` prefix looks like. Refused before authentication runs, so it answers 400 / 6003 -
+// and must still arrive as NotAuthenticatedException.
+$show('A token Cloudflare cannot parse at all:', static function () use ($cloudflare): void {
+    $cloudflare->withCredential(new ApiToken('MY-API-TOKEN'))->verify();
 });
 
 // A path that does not exist - the documented example of error code 7003.

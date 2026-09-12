@@ -383,6 +383,11 @@ class.
 
 Semantic versioning. PHP 8.3 and up.
 
+This is a 0.x release: the public API is not yet declared stable. Write `^0.1`, which accepts
+`0.1.x` and stops short of `0.2.0` — under Composer a caret constraint on a `0.x` version
+treats the minor as the breaking position, so `^0.1` is the `0.x` equivalent of `^1.0` and
+`~0.1` is not.
+
 Adding a case to `RecordType` is a breaking change, because an exhaustive `match` over it in a
 consumer would start throwing. Write a `default` arm.
 

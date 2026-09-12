@@ -83,7 +83,8 @@ $token->expiresWithinDays(30);
 $token->summary();                  // one line, carrying no part of the secret
 ```
 
-An invalid token raises `NotAuthenticatedException` rather than returning an object saying so.
+An invalid token raises `NotAuthenticatedException` rather than returning an object saying so —
+whichever of the two ways Cloudflare refuses it. See below.
 
 **Cloudflare reports a token's permissions nowhere** — not on this endpoint, not in a response
 header. Verification says the credential is real and live, and nothing about what it may do.
@@ -267,7 +268,7 @@ Every exception implements `Hampel\Cloudflare\Api\Exception\ExceptionInterface`.
 | Exception | Meaning |
 |---|---|
 | `ValidationException` | 400 — a value was rejected |
-| `NotAuthenticatedException` | 401, or error code 1000 — the token is missing, wrong or revoked |
+| `NotAuthenticatedException` | the credential is missing, wrong, unparseable or revoked |
 | `NotPermittedException` | 403 — the token lacks a permission or the resource is outside it |
 | `NotFoundException` | 404 — no such DNS record, or no such path |
 | `ConflictException` | 409 — a record that cannot coexist with what is there |
@@ -293,6 +294,20 @@ catch (ValidationException $e) {
 
 Branch on `hasCode()` rather than on a message. The codes are documented and stable; the
 messages are prose.
+
+### A bad credential arrives two ways
+
+Cloudflare refuses a token it cannot parse *before* authentication runs, so that failure wears a
+`400` rather than the `401` a well-formed but wrong token gets. Measured against the live API:
+
+| the token | HTTP | code |
+|---|---|---|
+| right shape, wrong value | `401` | `1000` |
+| unparseable — a placeholder, a truncated value, a stray `Bearer ` prefix | `400` | `6003` |
+
+Both raise `NotAuthenticatedException`. The second is the likelier failure in practice, and the
+only one whose status suggests the request was at fault rather than the credential — so catching
+`ValidationException` for it, as the status invites, sends you to inspect a payload that is fine.
 
 ### Absence is reported three different ways
 

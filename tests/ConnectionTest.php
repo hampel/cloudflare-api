@@ -73,6 +73,45 @@ final class ConnectionTest extends TestCase
         $this->cloudflare()->connection()->get('zones');
     }
 
+    /**
+     * A credential Cloudflare will not parse is refused before authentication runs, so it
+     * arrives as a 400. Measured on 2026-09-13: a placeholder token answers
+     * `400 {"code": 6003, "message": "Invalid request headers"}` where a well-formed but wrong
+     * one answers `401 / 1000`. Both are the credential, and a consumer catching
+     * NotAuthenticatedException at startup has to see both - the 400 is the likelier of the
+     * two, being what a truncated value or a leftover placeholder produces.
+     */
+    public function test_a_400_reporting_unparseable_headers_is_a_credential_failure(): void
+    {
+        $this->client->pushJson(400, $this->failure([
+            ['code' => 6003, 'message' => 'Invalid request headers'],
+        ]));
+
+        try {
+            $this->cloudflare()->connection()->get('user/tokens/verify');
+            $this->fail('did not raise');
+        } catch (ApiException $e) {
+            $this->assertInstanceOf(NotAuthenticatedException::class, $e);
+            $this->assertSame(400, $e->statusCode);
+            $this->assertTrue($e->hasCode(ApiException::CODE_INVALID_REQUEST_HEADERS));
+        }
+    }
+
+    /**
+     * Only that code. Every other 400 is still a rejected value, or the mapping would hide a
+     * genuine validation failure behind a credential one.
+     */
+    public function test_any_other_400_is_still_a_validation_failure(): void
+    {
+        $this->client->pushJson(400, $this->failure([
+            ['code' => 9021, 'message' => 'TTL must be between 60 and 86400 seconds, or 1 for Automatic.'],
+        ]));
+
+        $this->expectException(ValidationException::class);
+
+        $this->cloudflare()->connection()->post('zones/z/dns_records', ['ttl' => 5]);
+    }
+
     public function test_a_2xx_that_is_not_json_is_refused_rather_than_read_as_empty(): void
     {
         $this->client->pushRaw(200, '<html><body>We are having trouble</body></html>', [

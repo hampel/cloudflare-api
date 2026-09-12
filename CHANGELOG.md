@@ -1,6 +1,18 @@
 CHANGELOG
 =========
 
+0.1.1 (2026-09-13)
+------------------
+
+### Fixed
+
+* a credential Cloudflare cannot parse now raises `NotAuthenticatedException`. Such a token is
+  refused before authentication runs and answers 400 with code 6003, where a well-formed but
+  wrong one answers 401 with code 1000 — only the second reached the documented type, so a
+  placeholder left in a config file, a truncated value or a stray `Bearer ` prefix arrived as
+  `ValidationException`. Affects 0.1.0, on every call rather than only `verify()`
+* README documents both routes
+
 0.1.0 (2026-09-13)
 ------------------
 

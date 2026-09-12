@@ -10,6 +10,8 @@ CHANGELOG
   Cloudflare cannot parse raises `ValidationException` instead of `NotAuthenticatedException`
 * `ValidationException` documents that a 400 carrying code 6003 raises
   `NotAuthenticatedException` instead
+* `Config` documents the accepted page size ranges — 1 to 5,000,000 for DNS records, 5 to 50
+  for zones and accounts — so a global `pageSize` is usable only between 5 and 50
 
 0.1.1 (2026-09-13)
 ------------------

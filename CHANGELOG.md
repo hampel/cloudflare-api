@@ -1,6 +1,16 @@
 CHANGELOG
 =========
 
+0.1.2 (2026-09-13)
+------------------
+
+### Fixed
+
+* README recommends `^0.1.1` rather than `^0.1`. `^0.1` permits 0.1.0, where a credential
+  Cloudflare cannot parse raises `ValidationException` instead of `NotAuthenticatedException`
+* `ValidationException` documents that a 400 carrying code 6003 raises
+  `NotAuthenticatedException` instead
+
 0.1.1 (2026-09-13)
 ------------------
 

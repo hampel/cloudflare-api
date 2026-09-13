@@ -1,6 +1,33 @@
 CHANGELOG
 =========
 
+1.0.0 (2026-09-13)
+------------------
+
+**The public API is declared stable.** A breaking change from here means `2.0.0`. The
+constraint to write is `^1.0`.
+
+`RecordType` is the exception. It mirrors Cloudflare's own list of record types, so a type
+Cloudflare adds lands in a **minor** release, and every `match` over it needs a `default` arm.
+
+### Changed
+
+* `DnsRecord::$type` is `?RecordType`. A record whose type this package does not model reads as
+  `null` rather than as `RecordType::TXT`, and can be read but not written back. `raw` holds
+  everything Cloudflare sent
+* `Zones::identifier()` is `Support\Identifier::for()`
+
+### Added
+
+* README states what the stability promise covers and where it does not. `Entity::$raw`,
+  `DnsRecord::$data`, `ApiResponse::$envelope` and Cloudflare's numeric error codes are its
+  payload: the container is covered by the major version, the contents are not
+
+### Upgrading from 0.1.2
+
+* an exhaustive `match` over `RecordType` needs a `default` arm
+* `Zones::identifier()` callers use `Support\Identifier::for()`
+
 0.1.2 (2026-09-13)
 ------------------
 

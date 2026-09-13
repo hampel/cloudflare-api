@@ -27,33 +27,49 @@ composer require guzzlehttp/guzzle
 
 ```php
 use GuzzleHttp\Client as Guzzle;
-use GuzzleHttp\Psr7\HttpFactory;
-use Hampel\Cloudflare\Api\Authentication\ApiToken;
 use Hampel\Cloudflare\Api\Client;
-use Hampel\Cloudflare\Api\Config;
 use Hampel\Cloudflare\Api\Entity\DnsRecord;
 
-$guzzle  = new Guzzle();
-$factory = new HttpFactory();   // PSR-17, fills both the request and stream roles
+$cloudflare = Client::withToken('MY-API-TOKEN', new Guzzle());
 
-$cloudflare = new Client(new Config(), new ApiToken('MY-API-TOKEN'), $guzzle, $factory, $factory);
+$cloudflare->verify();                       // does this token work?
 
-$cloudflare->verify();
+$zone = $cloudflare->zones()->getByName('example.com');
 
-$zone    = $cloudflare->zones()->getByName('example.com');
-$records = $cloudflare->zones()->records($zone->id);
+foreach ($cloudflare->zones()->records($zone->id)->each() as $record) {
+    echo $record->describe(), "\n";
+}
 
-$records->create(DnsRecord::a($zone->fqdn('www'), '203.0.113.10')->proxy());
+$cloudflare->zones()->records($zone->id)
+    ->create(DnsRecord::a($zone->fqdn('www'), '203.0.113.10')->proxy());
 ```
 
-The short form, when every construction question takes its default:
+`withToken()` finds a PSR-17 factory for you — Guzzle's, Nyholm's or Diactoros', whichever is
+installed. The long form names everything:
 
 ```php
-$cloudflare = Client::withToken('MY-API-TOKEN', $guzzle);
+use GuzzleHttp\Psr7\HttpFactory;
+use Hampel\Cloudflare\Api\Authentication\ApiToken;
+use Hampel\Cloudflare\Api\Config;
+
+$factory = new HttpFactory();   // PSR-17, fills both the request and stream roles
+
+$cloudflare = new Client(
+    new Config(pageSize: 50),   // 5-50 if you set it at all - see Pagination
+    new ApiToken('MY-API-TOKEN'),
+    new Guzzle(),
+    $factory,
+    $factory,
+    $logger,                    // PSR-3, optional
+);
 ```
 
-Leave the PSR-17 factories out entirely and the package finds one — Guzzle's, Nyholm's or
-Diactoros', whichever is installed.
+Requests are logged at `debug` and failures at `error`; a write to DNS and a nearly-spent rate
+limit are `warning`. The token is never logged: `ApiToken` keeps it out of `__toString()`,
+`var_dump()` and stack traces.
+
+The PSR-18 client is always passed and never discovered — which HTTP client issues the request
+is a decision a host application may need to keep.
 
 ## Tokens, not the Global API Key
 

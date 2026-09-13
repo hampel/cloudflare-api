@@ -9,6 +9,9 @@
  *   - the RATE LIMIT HEADERS. `Ratelimit` and `Ratelimit-Policy` are documented; whether
  *     they appear on an ordinary response was never measured. The raw values are printed
  *     below, so the first real run answers it.
+ *   - WHETHER IT CAN BE USED FROM HERE. The verify endpoint ignores a token's IP address
+ *     filter, so this makes one real call straight after verifying and says so plainly when
+ *     the address is refused.
  *   - WHAT A TOKEN CAN REACH. Cloudflare publishes a token's permissions nowhere, so this
  *     asks instead: it tries the accounts list and the zones list and reports each. That is
  *     the closest thing to a capability report this API allows.
@@ -82,6 +85,26 @@ $io->values([
     'Retry-After' => $meta->retryAfter === null ? '(absent, as documented on a success)' : (string) $meta->retryAfter,
     'CF-Ray' => $meta->ray ?? '(absent)',
 ]);
+
+$io->line();
+
+// Verification ignores the token's IP address filter - measured on 2026-09-13, a token restricted
+// to other addresses verified as active from this one. So "the token works" above says nothing
+// about whether it works FROM HERE, and one real call is what settles it. A refusal arrives as
+// NotAuthenticatedException, which is why it is caught here rather than with the permission
+// checks below: nothing further in this exercise would succeed.
+try {
+    $cloudflare->zones()->list(1, 5);
+    $io->success('✓ usable from this address');
+} catch (NotAuthenticatedException $e) {
+    $io->error('✗ verified, but refused from this address');
+    $io->value('message', $e->messages()[0] ?? $e->getMessage());
+    $io->info('The token\'s IP address filter excludes wherever this is running. Verification cannot');
+    $io->info('see that, so the result above is correct and misleading: the credential is live, and');
+    $io->info('every zone and account call from here will be refused.');
+
+    exit(1);
+}
 
 $io->line();
 $io->info('Cloudflare reports a token\'s permissions nowhere, so what follows is measured by');

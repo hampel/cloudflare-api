@@ -53,7 +53,18 @@ function harness_domain(Io $io): string
 function harness_zone(Io $io, Client $cloudflare): Hampel\Cloudflare\Api\Entity\Zone
 {
     $domain = harness_domain($io);
-    $zone = $cloudflare->zones()->findByName($domain);
+
+    try {
+        $zone = $cloudflare->zones()->findByName($domain);
+    } catch (Hampel\Cloudflare\Api\Exception\NotAuthenticatedException $e) {
+        // A token its IP filter refuses gets here having passed nothing - there is no verify()
+        // on this path - so the message is the whole diagnosis. `rig verify` explains it.
+        $io->error('The token was refused: ' . ($e->messages()[0] ?? $e->getMessage()));
+        $io->info('If that names a location, the token\'s IP address filter excludes wherever this is');
+        $io->info('running. Run `rig verify` for the full picture.');
+
+        exit(1);
+    }
 
     if ($zone === null) {
         $io->error(sprintf('No zone named "%s" is visible to this token.', $domain));

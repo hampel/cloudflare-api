@@ -81,25 +81,32 @@ final class DnsRecordEntityTest extends BaseTestCase
     }
 
     /**
-     * Caught per case rather than with expectException(), which would end the test on the
-     * first throw and leave the other two constructors unexercised while still passing.
+     * @return array<string, array{\Closure(): DnsRecord}>
      */
-    public function test_those_constructors_refuse_an_empty_value_like_the_others(): void
+    public static function constructorsRefusingAnEmptyValue(): array
     {
-        $cases = [
-            'aaaa' => fn (): DnsRecord => DnsRecord::aaaa('www.example.com', ''),
-            'ns' => fn (): DnsRecord => DnsRecord::ns('sub.example.com', ''),
-            'ptr' => fn (): DnsRecord => DnsRecord::ptr('10.113.0.203.in-addr.arpa', ' '),
+        return [
+            'aaaa' => [static fn (): DnsRecord => DnsRecord::aaaa('www.example.com', '')],
+            'ns' => [static fn (): DnsRecord => DnsRecord::ns('sub.example.com', '')],
+            'ptr' => [static fn (): DnsRecord => DnsRecord::ptr('10.113.0.203.in-addr.arpa', ' ')],
         ];
+    }
 
-        foreach ($cases as $name => $build) {
-            try {
-                $build();
-                $this->fail($name . '() accepted an empty value');
-            } catch (InvalidArgumentException $e) {
-                $this->assertStringContainsString('needs', $e->getMessage(), $name);
-            }
-        }
+    /**
+     * ONE CASE PER TEST, and that is the whole point of the provider rather than tidiness. A
+     * loop over the three reports only the first to break - with `expectException()` it
+     * reports nothing at all, because the first throw ends the test and the remaining cases
+     * never run while the suite stays green. Measured here: with `ns()` and `ptr()` both
+     * broken, a loop named `ns` and left `ptr` invisible until the first was fixed.
+     *
+     * @param  \Closure(): DnsRecord  $build
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('constructorsRefusingAnEmptyValue')]
+    public function test_those_constructors_refuse_an_empty_value_like_the_others(\Closure $build): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $build();
     }
 
     public function test_an_empty_name_is_refused_with_the_reason(): void

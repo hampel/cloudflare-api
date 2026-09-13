@@ -303,12 +303,59 @@ final class DnsRecordEntityTest extends BaseTestCase
         $this->assertSame([], $fetched->withTags([])->toArray()['tags']);
     }
 
-    public function test_an_unknown_record_type_does_not_break_parsing(): void
+    /**
+     * A type Cloudflare adds that this release does not know reads as `null`, not as a guess.
+     *
+     * It used to fall back to `RecordType::TXT`, which was the one field that decides where a
+     * record's value lives, whether it can be proxied and whether it has a priority - so the
+     * guess made `$record->type === RecordType::TXT` true for a record that was not TXT, and
+     * would have sent `content` for a record whose value belongs in `data`.
+     */
+    public function test_an_unknown_record_type_reads_as_null_rather_than_a_guess(): void
     {
         $record = DnsRecord::fromArray(['type' => 'FUTURE', 'name' => 'x.example.com', 'content' => 'v']);
 
+        $this->assertNull($record->type);
+        $this->assertNotSame(RecordType::TXT, $record->type, 'it must not masquerade as a type it is not');
         $this->assertSame('FUTURE', $record->raw['type'], 'the real value stays reachable');
         $this->assertSame('x.example.com', $record->name);
+        $this->assertSame('v', $record->content);
+    }
+
+    /**
+     * Reading such a record is fine. Writing it is refused, because every rule for building the
+     * payload is a property of the type.
+     */
+    public function test_a_record_of_an_unknown_type_cannot_be_written_back(): void
+    {
+        $record = DnsRecord::fromArray(['type' => 'FUTURE', 'name' => 'x.example.com', 'content' => 'v']);
+
+        foreach ([
+            'toArray' => static fn (): mixed => $record->toArray(),
+            'toPatchArray' => static fn (): mixed => $record->toPatchArray(),
+            'proxy' => static fn (): mixed => $record->proxy(),
+            'withContent' => static fn (): mixed => $record->withContent('x'),
+            'withPriority' => static fn (): mixed => $record->withPriority(10),
+        ] as $what => $call) {
+            try {
+                $call();
+                $this->fail($what . '() built a payload for a type it does not model');
+            } catch (InvalidArgumentException $e) {
+                $this->assertStringContainsString('FUTURE', $e->getMessage(), $what);
+            }
+        }
+    }
+
+    /**
+     * describe() is for logs and must never throw - an unloggable record is worse than an
+     * imprecise log line.
+     */
+    public function test_an_unknown_type_still_describes_itself(): void
+    {
+        $record = DnsRecord::fromArray(['type' => 'FUTURE', 'name' => 'x.example.com', 'content' => 'v']);
+
+        $this->assertStringContainsString('FUTURE', $record->describe());
+        $this->assertStringContainsString('x.example.com', $record->describe());
     }
 
     public function test_describe_reads_like_a_zone_file_line(): void

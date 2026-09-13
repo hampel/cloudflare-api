@@ -30,6 +30,11 @@ use Hampel\Cloudflare\Api\Support\Identifier;
  * because absorbing a refusal is what lets a diagnostic report what it can rather than
  * stopping at the first thing it may not see.
  *
+ * A TOKEN REFUSED BY ITS IP ADDRESS FILTER IS NOT ABSORBED. It arrives as a 403 too, and 1.0.0
+ * swallowed it here, reporting "not readable by this token" for a credential that could not be
+ * used from this address at all. It now raises NotAuthenticatedException before reaching these
+ * catches, which is the honest answer: nothing else will work either.
+ *
  * Either way this is for diagnostics rather than routine work: it answers "what does this
  * credential actually reach", which on an API that publishes no permissions is as close to a
  * capability report as there is.

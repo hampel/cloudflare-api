@@ -6,6 +6,8 @@ namespace Hampel\Cloudflare\Api\Tests;
 
 use Hampel\Cloudflare\Api\Exception\InvalidArgumentException;
 use Hampel\Cloudflare\Api\Exception\NotPermittedException;
+use Hampel\Cloudflare\Api\Exception\NotAuthenticatedException;
+use Hampel\Cloudflare\Api\Endpoint\Accounts;
 
 final class AccountsTest extends TestCase
 {
@@ -87,6 +89,36 @@ final class AccountsTest extends TestCase
 
         $this->assertSame(0, $page->total());
         $this->assertTrue($page->isEmpty());
+    }
+
+    /**
+     * Found by extending a report about Zones::find(): both Accounts methods absorbed any 403,
+     * so a token refused by its IP filter read as "this token cannot read accounts" rather than
+     * "this token cannot be used from here". Reproduced live on 2026-09-13.
+     *
+     * @return array<string, array{\Closure(Accounts): mixed}>
+     */
+    public static function degradingMethods(): array
+    {
+        return [
+            'first' => [static fn (Accounts $accounts): mixed => $accounts->first()],
+            'find' => [static fn (Accounts $accounts): mixed => $accounts->find(self::ACCOUNT_ID)],
+        ];
+    }
+
+    /**
+     * @param  \Closure(Accounts): mixed  $call
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('degradingMethods')]
+    public function test_a_location_refusal_is_not_absorbed_as_an_unreadable_account(\Closure $call): void
+    {
+        $this->client->pushJson(403, $this->failure([
+            ['code' => 9109, 'message' => 'Cannot use the access token from location: 203.0.113.99'],
+        ]));
+
+        $this->expectException(NotAuthenticatedException::class);
+
+        $call($this->cloudflare()->accounts());
     }
 
     public function test_find_absorbs_both_absence_and_refusal(): void

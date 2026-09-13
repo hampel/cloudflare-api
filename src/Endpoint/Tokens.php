@@ -29,6 +29,11 @@ final class Tokens extends Endpoint
      *
      * Raises NotAuthenticatedException when the token is not valid - see TokenVerification
      * for why that is a throw rather than a flag on the returned object.
+     *
+     * IT IGNORES THE TOKEN'S IP ADDRESS FILTER. Measured on 2026-09-13: a token restricted to
+     * other addresses verified as active from this one, and the next zone listing was refused
+     * with "Cannot use the access token from location". So a passing verification does not
+     * mean the token can be used from here; one real call afterwards is what establishes that.
      */
     public function verify(): TokenVerification
     {

@@ -45,8 +45,17 @@ final class Zones extends Endpoint
     /**
      * What Cloudflare answers, inside a 403, for a zone id this token cannot address -
      * whether because no such zone exists or because it belongs to somebody else.
+     *
+     * NOT UNIQUE TO ZONES. The same code arrives for a token refused by its IP address filter,
+     * so on its own it does not mean the zone is absent. See find().
      */
     public const CODE_INVALID_ZONE_IDENTIFIER = 9109;
+
+    /**
+     * The message that accompanies CODE_INVALID_ZONE_IDENTIFIER when it means what its name
+     * says. Measured on 2026-09-12.
+     */
+    private const MESSAGE_INVALID_ZONE_IDENTIFIER = 'invalid zone identifier';
 
     /**
      * One page of the account's zones.
@@ -100,12 +109,23 @@ final class Zones extends Endpoint
     /**
      * One zone by id, or null when this token cannot address it.
      *
-     * The 403 described on get() is absorbed here, but ONLY when it carries code 9109. A 403
-     * for any other reason still raises, and the distinction earns its keep: a token whose
-     * permissions are wrong reports `10000, Authentication error` - measured on the same day,
-     * by listing the records of a zone outside the token's resources - and silently returning
-     * null for that would turn a misconfigured credential into "the zone does not exist",
-     * which sends whoever reads it to the wrong dashboard.
+     * The 403 described on get() is absorbed here, but ONLY when it carries code 9109 AND the
+     * message "Invalid zone identifier". A 403 for any other reason still raises, and the
+     * distinction earns its keep: a token whose permissions are wrong reports
+     * `10000, Authentication error` - measured on 2026-09-12, by listing the records of a zone
+     * outside the token's resources - and silently returning null for that would turn a
+     * misconfigured credential into "the zone does not exist", which sends whoever reads it to
+     * the wrong dashboard.
+     *
+     * THE CODE ALONE WAS NOT ENOUGH, and 1.0.0 got this wrong. Cloudflare sends 9109 for a
+     * token refused by its IP address filter too, with "Cannot use the access token from
+     * location". Absorbing on the code made `find()` answer "no such zone" for a zone that
+     * exists, from any address outside the filter - the exact outcome this catch was written
+     * to prevent. That case now raises NotAuthenticatedException before it gets here.
+     *
+     * The message is matched positively, on the zone wording, because that fails in the safe
+     * direction: if Cloudflare rewords it, this raises rather than returning a null it cannot
+     * justify.
      *
      * The 404 branch is kept because it costs nothing and the API's shape here is not a
      * promise: a record id that does not exist DOES answer 404, so the two id types in this
@@ -118,12 +138,28 @@ final class Zones extends Endpoint
         } catch (NotFoundException) {
             return null;
         } catch (NotPermittedException $e) {
-            if (!$e->hasCode(self::CODE_INVALID_ZONE_IDENTIFIER)) {
+            if (!self::isInvalidZoneIdentifier($e)) {
                 throw $e;
             }
 
             return null;
         }
+    }
+
+    private static function isInvalidZoneIdentifier(NotPermittedException $e): bool
+    {
+        foreach ($e->errors as $error) {
+            $message = strtolower(rtrim(trim($error->message), '.'));
+
+            if (
+                $error->code === self::CODE_INVALID_ZONE_IDENTIFIER
+                && $message === self::MESSAGE_INVALID_ZONE_IDENTIFIER
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -141,8 +177,7 @@ final class Zones extends Endpoint
      * mode if it ever stopped is not an error - it is a 200 carrying the first zone on the
      * account, which this would return as "the zone called example.com". Everything
      * downstream then edits the wrong domain's DNS. A filter being ignored is a silent
-     * success, so it is caught by confirming the answer rather than by trusting the request;
-     * the `filtering` harness exercise is the other half of the same check.
+     * success, so it is caught by confirming the answer rather than by trusting the request.
      */
     public function findByName(string $domain): ?Zone
     {

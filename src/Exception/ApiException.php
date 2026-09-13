@@ -20,10 +20,12 @@ use Psr\Http\Message\ResponseInterface;
  * stable - `hasCode()` is the test worth writing. The subclasses below split the statuses a
  * caller can actually act on differently, so the common cases need no inspection at all.
  *
- * THE STATUS IS NOT ALWAYS WHAT DECIDES THE TYPE. Two codes are mapped ahead of it, both
+ * THE STATUS IS NOT ALWAYS WHAT DECIDES THE TYPE. Three responses are mapped ahead of it, all
  * because the status alone would send a caller to the wrong problem: 6003 on a 400 is a
- * credential Cloudflare could not parse, and 1000 on a 2xx is one it parsed and rejected inside
- * an envelope that claimed success.
+ * credential Cloudflare could not parse; 9109 on a 403 with a location message is a credential
+ * refused by its IP address filter; and 1000 on a 2xx is one it parsed and rejected inside an
+ * envelope that claimed success. All three are the credential, and raise
+ * NotAuthenticatedException.
  */
 abstract class ApiException extends CloudflareException
 {
@@ -35,19 +37,36 @@ abstract class ApiException extends CloudflareException
     /**
      * Cloudflare's code for a credential it would not even parse.
      *
-     * A TOKEN CAN BE REFUSED TWO WAYS AND ONLY ONE OF THEM IS A 401. Measured on 2026-09-13: a
+     * A TOKEN CAN BE REFUSED SEVERAL WAYS AND ONLY ONE OF THEM IS A 401. Measured on 2026-09-13: a
      * forty-character token of the right shape but the wrong value answers `401` with code
      * 1000, while a token that does not look like one at all - a placeholder left in a config
      * file, a truncated value, a stray `Bearer ` prefix - answers `400` with this code and the
      * message "Invalid request headers", because the request is rejected before authentication
      * runs.
      *
-     * Both are the credential, so both raise NotAuthenticatedException. Attributing this code
+     * Both are the credential, so both raise NotAuthenticatedException - as does the third, a token
+     * refused by its IP address filter; see CODE_LOCATION_OR_ZONE_IDENTIFIER. Attributing this code
      * to the credential is safe for this package specifically: it sets three headers - Accept,
-     * Content-Type and Authorization - and only Authorization carries anything the caller
-     * supplied.
+     * Content-Type and Authorization - and only Authorization carries anything the caller supplied.
      */
     public const CODE_INVALID_REQUEST_HEADERS = 6003;
+
+    /**
+     * The code a token refused by its IP address filter arrives with - and, separately, the
+     * code for a zone id that does not exist. One number, two meanings.
+     *
+     * Measured on 2026-09-13 with a token whose filter excluded the calling address: every
+     * zone and account call answered `403` with this code and "Cannot use the access token
+     * from location: <address>", while `/user/tokens/verify` still said the token was active.
+     *
+     * So the code alone decides nothing, and the location case is recognised by its message as
+     * well. That makes it the one place here that reads prose, which the class docblock warns
+     * against, and the direction it fails in is the reason it is acceptable: if Cloudflare
+     * rewords the message, a location refusal falls back to NotPermittedException - the type
+     * it had before this was recognised - rather than to something that claims more than is
+     * known.
+     */
+    private const CODE_LOCATION_OR_ZONE_IDENTIFIER = 9109;
 
     /**
      * @param  list<ApiError>  $errors  the API's own errors[], parsed
@@ -101,6 +120,11 @@ abstract class ApiException extends CloudflareException
                 => NotAuthenticatedException::class,
             $status === 400 => ValidationException::class,
             $status === 401 => NotAuthenticatedException::class,
+            // Before the generic 403, for the same reason as the 6003 arm: a token its own IP
+            // filter refuses is not a missing permission, it is a credential that will fail
+            // every call from here. Left as NotPermittedException it was absorbed as "no such
+            // zone" by Zones::find() and as "not readable" by Accounts.
+            $status === 403 && self::refusesLocation($errors) => NotAuthenticatedException::class,
             $status === 403 => NotPermittedException::class,
             $status === 404 => NotFoundException::class,
             $status === 409 => ConflictException::class,
@@ -173,6 +197,25 @@ abstract class ApiException extends CloudflareException
     {
         foreach ($this->errors as $error) {
             if ($error->field() === $field) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether Cloudflare refused the token because of where the request came from.
+     *
+     * @param  list<ApiError>  $errors
+     */
+    private static function refusesLocation(array $errors): bool
+    {
+        foreach ($errors as $error) {
+            if (
+                $error->code === self::CODE_LOCATION_OR_ZONE_IDENTIFIER
+                && stripos($error->message, 'access token from location') !== false
+            ) {
                 return true;
             }
         }

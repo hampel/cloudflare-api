@@ -100,7 +100,20 @@ $token->summary();                  // one line, carrying no part of the secret
 ```
 
 An invalid token raises `NotAuthenticatedException` rather than returning an object saying so —
-whichever of the two ways Cloudflare refuses it. See below.
+whichever way Cloudflare refuses it. See below.
+
+**Verification ignores the token's IP address filter.** A token restricted to other addresses
+verifies as `active` from this one, and then every zone and account call is refused with "Cannot use
+the access token from location". Verification says the credential exists and is live; it does not
+say it can be used from here. The first real call is what answers that, and it raises
+`NotAuthenticatedException` too — so a startup check that wants the whole answer lists one page of
+zones after verifying:
+
+```php
+$cloudflare->verify();
+$cloudflare->zones()->list(1, 5);   // raises NotAuthenticatedException if refused from here
+```
+
 
 **Cloudflare reports a token's permissions nowhere** — not on this endpoint, not in a response
 header. Verification says the credential is real and live, and nothing about what it may do.
@@ -284,7 +297,7 @@ Every exception implements `Hampel\Cloudflare\Api\Exception\ExceptionInterface`.
 | Exception | Meaning |
 |---|---|
 | `ValidationException` | 400 — a value was rejected |
-| `NotAuthenticatedException` | the credential is missing, wrong, unparseable or revoked |
+| `NotAuthenticatedException` | the credential is missing, wrong, unparseable, revoked, or refused from this address |
 | `NotPermittedException` | 403 — the token lacks a permission or the resource is outside it |
 | `NotFoundException` | 404 — no such DNS record, or no such path |
 | `ConflictException` | 409 — a record that cannot coexist with what is there |
@@ -311,19 +324,24 @@ catch (ValidationException $e) {
 Branch on `hasCode()` rather than on a message. The codes are documented and stable; the
 messages are prose.
 
-### A bad credential arrives two ways
+### A bad credential arrives three ways
 
 Cloudflare refuses a token it cannot parse *before* authentication runs, so that failure wears a
-`400` rather than the `401` a well-formed but wrong token gets. Measured against the live API:
+`400` rather than the `401` a well-formed but wrong token gets. And it refuses a token used from
+outside its IP address filter with a `403`. Measured against the live API:
 
 | the token | HTTP | code |
 |---|---|---|
 | right shape, wrong value | `401` | `1000` |
 | unparseable — a placeholder, a truncated value, a stray `Bearer ` prefix | `400` | `6003` |
+| used from an address outside its IP filter | `403` | `9109` |
 
-Both raise `NotAuthenticatedException`. The second is the likelier failure in practice, and the
-only one whose status suggests the request was at fault rather than the credential — so catching
-`ValidationException` for it, as the status invites, sends you to inspect a payload that is fine.
+All three raise `NotAuthenticatedException`. The second and third are the ones worth knowing
+about, because their status points away from the credential: a `400` invites you to inspect a
+payload that is fine, and a `403` reads as a missing permission when no permission would help.
+
+The location refusal is recognised by its message, "Cannot use the access token from location",
+because Cloudflare uses the same code `9109` for an unknown zone id.
 
 ### Absence is reported three different ways
 
@@ -338,10 +356,15 @@ Measured against the live API:
 So a missing zone arrives as `NotPermittedException`, not `NotFoundException` — Cloudflare
 will not confirm which zone ids exist to a credential that cannot see them.
 
-`Zones::find()` absorbs the `9109` case and returns `null`. It does **not** absorb a 403
-carrying code `10000` — "Authentication error", a token whose permissions or resources do not
-cover the zone — because reporting a misconfigured credential as "the zone does not exist"
-sends whoever chases it to the wrong place.
+`Zones::find()` absorbs the `9109` case and returns `null` — **only when the message is
+"Invalid zone identifier"**, because `9109` also arrives for a token refused by its IP filter, and
+that is raised as `NotAuthenticatedException` instead. It does not absorb a 403 carrying code
+`10000` either — "Authentication error", a token whose permissions or resources do not cover the
+zone — because reporting a credential problem as "the zone does not exist" sends whoever chases it
+to the wrong place.
+
+If Cloudflare ever rewords "Invalid zone identifier", `find()` raises rather than returning
+`null`.
 
 ### `success: false` on a 200
 

@@ -9,6 +9,7 @@ use Hampel\Cloudflare\Api\Entity\Zone;
 use Hampel\Cloudflare\Api\Enum\ZoneStatus;
 use Hampel\Cloudflare\Api\Enum\ZoneType;
 use Hampel\Cloudflare\Api\Exception\InvalidArgumentException;
+use Hampel\Cloudflare\Api\Exception\NotAuthenticatedException;
 use Hampel\Cloudflare\Api\Endpoint\Zones;
 use Hampel\Cloudflare\Api\Exception\NotPermittedException;
 
@@ -188,6 +189,60 @@ final class ZonesTest extends TestCase
         } catch (NotPermittedException $e) {
             $this->assertTrue($e->hasCode(10000));
         }
+    }
+
+    /**
+     * The 1.0.0 defect. From an address outside the token's IP filter, find() answered "no such
+     * zone" for a zone that exists, because the refusal carries the same code as an unknown zone
+     * id. Reproduced live on 2026-09-13 before this was changed.
+     */
+    public function test_find_does_not_report_a_location_refused_token_as_a_missing_zone(): void
+    {
+        $this->client->pushJson(403, $this->failure([
+            ['code' => 9109, 'message' => 'Cannot use the access token from location: 203.0.113.99'],
+        ]));
+
+        $this->expectException(NotAuthenticatedException::class);
+
+        $this->cloudflare()->zones()->find(self::ZONE_ID);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function unrecognisedMessagesForTheZoneCode(): array
+    {
+        return [
+            'reworded' => ['Zone identifier is not valid'],
+            'empty' => [''],
+            'a location refusal Cloudflare has reworded' => ['Access denied from this network'],
+        ];
+    }
+
+    /**
+     * The direction find() fails in when the message is not the one it recognises: it raises.
+     * A null it cannot justify is the failure this method exists to avoid, so an unfamiliar
+     * message on code 9109 is reported rather than read as absence.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('unrecognisedMessagesForTheZoneCode')]
+    public function test_find_raises_rather_than_guessing_on_an_unrecognised_9109(string $message): void
+    {
+        $this->client->pushJson(403, $this->failure([['code' => 9109, 'message' => $message]]));
+
+        $this->expectException(NotPermittedException::class);
+
+        $this->cloudflare()->zones()->find(self::ZONE_ID);
+    }
+
+    public function test_find_by_name_raises_the_credential_type_for_a_location_refusal(): void
+    {
+        $this->client->pushJson(403, $this->failure([
+            ['code' => 9109, 'message' => 'Cannot use the access token from location: 203.0.113.99'],
+        ]));
+
+        $this->expectException(NotAuthenticatedException::class);
+
+        $this->cloudflare()->zones()->findByName('example.com');
     }
 
     public function test_find_also_absorbs_a_404_for_the_endpoints_that_answer_with_one(): void

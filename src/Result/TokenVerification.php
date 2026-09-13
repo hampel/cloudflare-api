@@ -33,6 +33,10 @@ use Hampel\Cloudflare\Api\Support\Cast;
  * reach. So there is no equivalent of a scope check, and a startup routine that wants to
  * know whether it can manage DNS has to try: list the zones, and handle the 403. Accounts
  * and Zones both degrade gracefully for exactly this reason.
+ *
+ * NOR WHETHER IT MAY BE USED FROM HERE. The verify endpoint ignores the token's IP address
+ * filter, so a token restricted to other addresses comes back active. The same zone listing
+ * answers this too: it raises NotAuthenticatedException when the address is refused.
  */
 final class TokenVerification implements \JsonSerializable
 {

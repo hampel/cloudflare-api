@@ -125,6 +125,9 @@ final class Client
      * IT CANNOT TELL YOU WHAT THE TOKEN MAY DO, because Cloudflare does not report a token's
      * permissions anywhere. A verification that passes says the credential is real and live,
      * and says nothing about whether it can read a zone - see TokenVerification.
+     *
+     * NOR WHETHER IT MAY BE USED FROM THIS ADDRESS: verification ignores the token's IP filter.
+     * Follow it with one real call - `zones()->list(1, 5)` - where that matters.
      */
     public function verify(): TokenVerification
     {

@@ -72,8 +72,14 @@ answered with an empty collection.
 
 **Absence has three shapes**, and they are measured rather than assumed: a missing DNS record
 is `404 / 81044`, a missing or invisible zone is `403 / 9109`, and a malformed id is
-`400 / 7000`. `Zones::find()` therefore catches a specific 403 code — and deliberately not
+`400 / 7000`. `Zones::find()` therefore catches a specific 403 — and deliberately not
 `403 / 10000`, which is a permissions failure and must keep raising.
+
+**Code 9109 has two meanings.** It is also what a token refused by its IP address filter gets,
+with "Cannot use the access token from location". `ApiException::fromResponse()` maps that to
+`NotAuthenticatedException` by its message, and `Zones::find()` absorbs 9109 only alongside
+"Invalid zone identifier" — so a reworded message raises rather than reading as absence. And
+`/user/tokens/verify` ignores the filter entirely, reporting such a token as active.
 
 **TTL 1 is "automatic", served as 300 seconds.** Not one second. `Ttl` carries the rules.
 

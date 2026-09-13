@@ -98,6 +98,43 @@ final class ConnectionTest extends TestCase
     }
 
     /**
+     * A token refused by its IP address filter. Measured on 2026-09-13 from an address outside
+     * the filter: every zone and account call answered this, while `verify()` said the token was
+     * active. It is the credential that fails, on every call from here - not a permission the
+     * token lacks - so it raises the credential type.
+     */
+    public function test_a_403_refusing_the_token_by_location_is_a_credential_failure(): void
+    {
+        $this->client->pushJson(403, $this->failure([
+            ['code' => 9109, 'message' => 'Cannot use the access token from location: 203.0.113.99'],
+        ]));
+
+        try {
+            $this->cloudflare()->connection()->get('zones');
+            $this->fail('did not raise');
+        } catch (ApiException $e) {
+            $this->assertInstanceOf(NotAuthenticatedException::class, $e);
+            $this->assertSame(403, $e->statusCode);
+            $this->assertTrue($e->hasCode(9109));
+        }
+    }
+
+    /**
+     * The same code with the zone meaning stays a 403 of the ordinary kind. 9109 carries two
+     * meanings, and only the location one is the credential.
+     */
+    public function test_the_same_code_meaning_an_unknown_zone_is_still_not_permitted(): void
+    {
+        $this->client->pushJson(403, $this->failure([
+            ['code' => 9109, 'message' => 'Invalid zone identifier'],
+        ]));
+
+        $this->expectException(NotPermittedException::class);
+
+        $this->cloudflare()->connection()->get('zones/' . self::ZONE_ID);
+    }
+
+    /**
      * Only that code. Every other 400 is still a rejected value, or the mapping would hide a
      * genuine validation failure behind a credential one.
      */

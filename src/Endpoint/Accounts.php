@@ -8,6 +8,7 @@ use Hampel\Cloudflare\Api\Entity\Account;
 use Hampel\Cloudflare\Api\Exception\NotFoundException;
 use Hampel\Cloudflare\Api\Exception\NotPermittedException;
 use Hampel\Cloudflare\Api\Result\Page;
+use Hampel\Cloudflare\Api\Support\Identifier;
 
 /**
  * The accounts this token can see.
@@ -82,7 +83,7 @@ final class Accounts extends Endpoint
     public function get(string $accountId): Account
     {
         return Account::fromArray(
-            $this->apiGet('accounts/' . Zones::identifier($accountId, 'account'))->object()
+            $this->apiGet('accounts/' . Identifier::for($accountId, 'account'))->object()
         );
     }
 

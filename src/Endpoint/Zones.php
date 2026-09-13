@@ -10,6 +10,7 @@ use Hampel\Cloudflare\Api\Exception\InvalidArgumentException;
 use Hampel\Cloudflare\Api\Exception\NotFoundException;
 use Hampel\Cloudflare\Api\Exception\NotPermittedException;
 use Hampel\Cloudflare\Api\Result\Page;
+use Hampel\Cloudflare\Api\Support\Identifier;
 
 /**
  * Zones - one per domain.
@@ -236,27 +237,7 @@ final class Zones extends Endpoint
 
     private function path(string $zoneId): string
     {
-        return 'zones/' . self::identifier($zoneId, 'zone');
+        return 'zones/' . Identifier::for($zoneId, 'zone');
     }
 
-    /**
-     * An empty identifier would build `zones/` - the LIST path - and a GET against it
-     * succeeds, returning the first page of every zone the token can see. Read as one zone
-     * that is whichever zone happened to sort first, and anything editing it afterwards is
-     * editing the wrong domain. Refusing it here costs nothing.
-     */
-    public static function identifier(string $id, string $of): string
-    {
-        $id = trim($id);
-
-        if ($id === '') {
-            throw new InvalidArgumentException(sprintf(
-                'A %s id is required. An empty one addresses the collection instead, which '
-                    . 'answers with a 200 and the wrong thing rather than an error.',
-                $of
-            ));
-        }
-
-        return rawurlencode($id);
-    }
 }

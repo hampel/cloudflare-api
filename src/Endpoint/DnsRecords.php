@@ -8,6 +8,7 @@ use Hampel\Cloudflare\Api\Entity\DnsRecord;
 use Hampel\Cloudflare\Api\Enum\RecordType;
 use Hampel\Cloudflare\Api\Result\Page;
 use Hampel\Cloudflare\Api\Support\RecordQuery;
+use Hampel\Cloudflare\Api\Support\Identifier;
 
 /**
  * The DNS records inside a zone.
@@ -263,8 +264,8 @@ final class DnsRecords extends Endpoint
 
     private function path(string $zoneId, ?string $recordId = null): string
     {
-        $path = 'zones/' . Zones::identifier($zoneId, 'zone') . '/dns_records';
+        $path = 'zones/' . Identifier::for($zoneId, 'zone') . '/dns_records';
 
-        return $recordId === null ? $path : $path . '/' . Zones::identifier($recordId, 'DNS record');
+        return $recordId === null ? $path : $path . '/' . Identifier::for($recordId, 'DNS record');
     }
 }

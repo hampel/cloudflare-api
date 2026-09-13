@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hampel\Cloudflare\Api\Endpoint;
 
 use Hampel\Cloudflare\Api\Result\TokenVerification;
+use Hampel\Cloudflare\Api\Support\Identifier;
 
 /**
  * The credential itself: does it work, and is it still usable.
@@ -53,7 +54,7 @@ final class Tokens extends Endpoint
      */
     public function verifyForAccount(string $accountId): TokenVerification
     {
-        $path = 'accounts/' . Zones::identifier($accountId, 'account') . '/tokens/verify';
+        $path = 'accounts/' . Identifier::for($accountId, 'account') . '/tokens/verify';
 
         $response = $this->apiGet($path);
 

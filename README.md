@@ -396,22 +396,70 @@ class.
 
 ## Versioning and support
 
-Semantic versioning. PHP 8.3 and up.
+Semantic versioning. `1.0.0` declares the public API stable.
 
-This is a 0.x release: the public API is not yet declared stable. Write `^0.1.1`, which accepts
-`0.1.1` and later and stops short of `0.2.0` — under Composer a caret constraint on a `0.x`
-version treats the minor as the breaking position, so a caret here is the `0.x` equivalent of
-`^1.0`, and `~0.1` is not.
+```json
+"hampel/cloudflare-api": "^1.0"
+```
 
-Floor it at `0.1.1` rather than `0.1.0`: the earlier release routes a credential Cloudflare
-cannot parse to `ValidationException`, contradicting the error documentation above.
+That is `>=1.0.0 <2.0.0`. **Write `^1.0`, not `~1.0.0`** — the tilde means `>=1.0.0 <1.1.0`,
+which resolves only patch releases.
 
-Adding a case to `RecordType` is a breaking change, because an exhaustive `match` over it in a
-consumer would start throwing. Write a `default` arm.
+- **PHP 8.3 or later.** Tested against 8.3 (including at the lowest resolvable dependency set),
+  8.4 and 8.5, and against Guzzle 7 and 8.
+- **1.x is supported.** Fixes land on the current minor.
+- **0.x is not.** See the CHANGELOG for the two changes between `0.1.2` and `1.0.0`.
 
-The `raw` property on every entity is the payload it was built from, so a field added to the
-API after a release is reachable without waiting for one. Its contents are Cloudflare's to
-change.
+### What "stable" covers, and the one place it deliberately does not
+
+A breaking change to a class, method or method signature in `src/` means `2.0.0`.
+
+**`RecordType` is the exception.** It mirrors Cloudflare's own list of record types, which this
+package does not control, so a type Cloudflare adds appears here **in a minor release**.
+
+**Every `match` over `RecordType` needs a `default` arm.** Without one, a new Cloudflare record
+type is a fatal `UnhandledMatchError`.
+
+Until that minor lands, a record of the new type reads with `$type` as `null` rather than as
+some other type. It can be read — `raw` holds everything Cloudflare sent — and cannot be written
+back, because where its value lives, whether it can be proxied and whether it has a priority are
+all properties of the type.
+
+`CaaTag`, `ZoneStatus`, `ZoneType` and `TokenStatus` behave the same way: an unrecognised value
+is `null`, never a guess and never an exception.
+
+### Cloudflare's payloads: the container is stable, the contents are not
+
+Applies to `Entity::$raw`, `DnsRecord::$data`, `ApiResponse::$envelope` and the numeric codes on
+`ApiError`.
+
+**Covered by the major version:**
+
+- `ApiException::$errors` exists on every subclass, is `public readonly`, and is always a
+  `list<ApiError>` — `[]` when the response carried no errors or was not JSON at all. Never
+  `null`.
+- likewise `$statusCode` (`int`), `$body` (`string`, the raw response) and `$retryAfter`
+  (`?int`).
+- `ApiError::$code` (`int`), `$message` (`string`), `$pointer` and `$documentationUrl`
+  (`?string`).
+- `$raw` exists on every entity and is an `array<string, mixed>`; `DnsRecord::$data` likewise.
+
+**Not covered:** what is *inside* `$raw`, `$data` and `$envelope`, and which numeric code
+Cloudflare uses for which failure. Those are Cloudflare's payload, passed through with no
+reshaping beyond dropping entries of the wrong type. A field renamed inside a record's `data`
+does not produce a major here. Read them with `??`:
+
+```php
+if ($e instanceof ValidationException) {
+    foreach ($e->errors as $error) {
+        $log->warning($error->message, ['code' => $error->code, 'field' => $error->field()]);
+    }
+}
+```
+
+**This package promises the shape it built, not the shape Cloudflare sent.** Where the two meet
+— an enum of Cloudflare's record types, a `data` object of Cloudflare's components — the
+container is covered by the major version and the contents are not.
 
 ## Licence
 

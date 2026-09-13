@@ -13,9 +13,17 @@ namespace Hampel\Cloudflare\Api\Enum;
  * the components and rejects any attempt to set it. usesData() is that question, and it is
  * the one thing about this API most worth knowing before writing a record.
  *
- * A CLOSED SET, AND THAT IS A PROMISE WITH A COST. An exhaustive `match` over this enum in a
- * consumer throws `UnhandledMatchError` the day a case is added, so adding one is a breaking
- * change for this package and gets a major version. Write a `default` arm anyway.
+ * NOT A CLOSED SET, AND THE VERSIONING SAYS SO. This mirrors Cloudflare's own list, which this
+ * package does not control - HTTPS and SVCB were added to it - so a type Cloudflare adds lands
+ * here in a MINOR release rather than a major. Promising otherwise would be promising a major
+ * version on somebody else's schedule.
+ *
+ * WRITE A `default` ARM. An exhaustive `match` over this enum throws `UnhandledMatchError` the
+ * day a case is added, and that day is not ours to choose.
+ *
+ * Until the minor that adds it lands, a record of the new type reads with its `type` as null -
+ * see DnsRecord::fromArray(). It is readable and not writable, because every rule for building
+ * a payload is a property of the type.
  */
 enum RecordType: string
 {

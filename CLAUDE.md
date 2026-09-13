@@ -123,5 +123,7 @@ A separate CI job runs `composer-require-checker` with the dev dependencies pres
 PHPStan with them removed. The package must need nothing but the four PSR interfaces; a normal
 analysis run has Guzzle installed and would not notice.
 
-Adding a case to `RecordType` is a breaking change: an exhaustive `match` over it in a consumer
-starts throwing.
+`RecordType` mirrors Cloudflare's own list, which this package does not control, so a type
+Cloudflare adds lands in a **minor** release and every `match` over it needs a `default` arm.
+Until that minor ships, such a record reads with `$type` as `null` and cannot be written back —
+see the README's stability section, which is the promise 1.0.0 makes.

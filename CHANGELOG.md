@@ -1,6 +1,21 @@
 CHANGELOG
 =========
 
+1.0.1 (2026-09-13)
+------------------
+
+### Fixed
+
+* a token refused by its IP address filter raises `NotAuthenticatedException`. It arrives as a
+  403 with code 9109 — the code Cloudflare also uses for an unknown zone id — and was raised as
+  `NotPermittedException`, so `Zones::find()` returned `null` for a zone that exists and
+  `Accounts::find()` and `Accounts::first()` returned `null` as though accounts were unreadable
+* `Zones::find()` treats code 9109 as an absent zone only when the message is "Invalid zone
+  identifier", and raises otherwise
+* README, `Client::verify()` and `TokenVerification` document that verification ignores the
+  token's IP address filter, and that one real call afterwards establishes whether the token can
+  be used from this address
+
 1.0.0 (2026-09-13)
 ------------------
 

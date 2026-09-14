@@ -6,6 +6,7 @@ namespace Hampel\Cloudflare\Api\Endpoint;
 
 use Hampel\Cloudflare\Api\Connection;
 use Hampel\Cloudflare\Api\Exception\NotFoundException;
+use Hampel\Cloudflare\Api\Exception\RuntimeException;
 use Hampel\Cloudflare\Api\Result\ApiResponse;
 use Hampel\Cloudflare\Api\Result\Page;
 use Psr\Log\LoggerInterface;
@@ -19,15 +20,22 @@ use Psr\Log\NullLogger;
  * dozen that manage DNS and identify a token. The rest are not out of reach: an Endpoint
  * subclass is a first-class citizen, and Client::endpoint() will construct one.
  *
- *     final class Firewall extends Endpoint
+ *     final class CustomHostnames extends Endpoint
  *     {
- *         public function rules(string $zoneId): \Generator
+ *         public function each(string $zoneId): \Generator
  *         {
- *             return $this->apiEach('zones/' . $zoneId . '/firewall/rules', static fn (array $row) => $row);
+ *             return $this->apiEach('zones/' . $zoneId . '/custom_hostnames', static fn (array $row) => $row);
  *         }
+ *
+ *         protected function minimumPageSize(): int { return 5; }
+ *         protected function maximumPageSize(): int { return 1000; }
+ *         protected function collectionName(): string { return 'custom hostnames'; }
  *     }
  *
- *     $cloudflare->endpoint(Firewall::class)->rules($zoneId);
+ *     $cloudflare->endpoint(CustomHostnames::class)->each($zoneId);
+ *
+ * The three protected methods are required - the page size limits differ per endpoint, so each
+ * subclass states its own, and without them the class is abstract and cannot be constructed.
  *
  * There is nothing to register, nothing to boot and no container. The class IS the
  * registration, so a third-party package ships one, a consumer type-hints it, and static
@@ -37,6 +45,11 @@ use Psr\Log\NullLogger;
  * collection on this API answers in the same envelope, so apiPaginate() and apiEach() work
  * for an endpoint this package has never heard of - provided its page size limits are given,
  * because those are per-endpoint and there is no safe default.
+ *
+ * NOT EVERY COLLECTION PAGES BY NUMBER. Some - the Registrar's registrations, rulesets, list
+ * items - page by cursor, and their `result_info` carries a cursor and no `total_count`. A
+ * page-numbered walk cannot follow those, and apiEach() refuses one rather than returning its
+ * first page as the whole collection. See apiEach().
  */
 abstract class Endpoint
 {
@@ -157,22 +170,7 @@ abstract class Endpoint
         ?int $pageSize = null,
         array $query = [],
     ): Page {
-        $pageSize ??= $this->connection->config()->pageSize;
-
-        if ($pageSize !== null) {
-            Page::assertValidPageSize(
-                $pageSize,
-                $this->minimumPageSize(),
-                $this->maximumPageSize(),
-                $this->collectionName()
-            );
-
-            $query['per_page'] = $pageSize;
-        }
-
-        $query['page'] = max(1, $page);
-
-        return Page::fromResponse($this->apiGet($path, $query), $map);
+        return Page::fromResponse($this->apiGet($path, $this->pageQuery($page, $pageSize, $query)), $map);
     }
 
     /**
@@ -190,6 +188,17 @@ abstract class Endpoint
      * appear twice or not at all. Ordering explicitly - RecordQuery::orderBy() - narrows
      * that and does not remove it. Where completeness matters, de-duplicate by id.
      *
+     * KEYS RUN 0 TO N-1 ACROSS THE WHOLE WALK, not per page. They used to restart at 0 on each
+     * page, which foreach never notices and `iterator_to_array()` does: with its default of
+     * preserving keys, every page overwrote the one before and only the last page survived.
+     * Measured before 1.0.2 - four zones over two pages came back as two.
+     *
+     * A CURSOR-PAGED COLLECTION IS REFUSED, before anything is yielded. Its `result_info` carries
+     * a non-empty `cursor` (or `cursors.after`) and no `total_count`, so the page numbers this
+     * walk sends are ignored and it would stop after the first page with no error - returning,
+     * measured against the Registrar, one registration of 22. An empty cursor means the first
+     * page is the whole collection, and that is walked normally.
+     *
      * @template TItem
      * @param  callable(array<string, mixed>): TItem  $map
      * @param  array<string, scalar|null>  $query
@@ -202,11 +211,22 @@ abstract class Endpoint
         array $query = [],
     ): \Generator {
         $page = 1;
+        $key = 0;
 
         while (true) {
-            $result = $this->apiPaginate($path, $map, $page, $pageSize, $query);
+            $response = $this->apiGet($path, $this->pageQuery($page, $pageSize, $query));
 
-            yield from $result->items;
+            // Before yielding anything, so a caller never processes a partial collection and then
+            // meets the exception half way through.
+            self::refuseCursorPaging($response, $path);
+
+            $result = Page::fromResponse($response, $map);
+
+            // Not `yield from $result->items`: that re-yields each page's own keys, 0 upwards, so
+            // iterator_to_array() keeps only the last page. See the note above.
+            foreach ($result->items as $item) {
+                yield $key++ => $item;
+            }
 
             if (!$result->hasMore() || $result->isEmpty()) {
                 return;
@@ -214,5 +234,64 @@ abstract class Endpoint
 
             $page++;
         }
+    }
+
+    /**
+     * The query for one page of a page-numbered collection, with the page size validated
+     * against this endpoint's own limits before a request is spent finding out.
+     *
+     * @param  array<string, scalar|null>  $query
+     * @return array<string, scalar|null>
+     */
+    private function pageQuery(int $page, ?int $pageSize, array $query): array
+    {
+        $pageSize ??= $this->connection->config()->pageSize;
+
+        if ($pageSize !== null) {
+            Page::assertValidPageSize(
+                $pageSize,
+                $this->minimumPageSize(),
+                $this->maximumPageSize(),
+                $this->collectionName()
+            );
+
+            $query['per_page'] = $pageSize;
+        }
+
+        $query['page'] = max(1, $page);
+
+        return $query;
+    }
+
+    /**
+     * Stop a page-numbered walk that has landed on a cursor-paged collection with more to come.
+     *
+     * Two cursor shapes exist on this API: a string `result_info.cursor`, measured on the
+     * Registrar, and an object `result_info.cursors` whose `after` points onward, in the
+     * specification for list items. Either one, non-empty and without a `total_count` beside it,
+     * means more pages that page numbers cannot reach.
+     */
+    private static function refuseCursorPaging(ApiResponse $response, string $path): void
+    {
+        $info = $response->envelope['result_info'] ?? null;
+
+        if (!is_array($info) || array_key_exists('total_count', $info)) {
+            return;
+        }
+
+        $cursors = $info['cursors'] ?? null;
+        $next = $info['cursor'] ?? (is_array($cursors) ? ($cursors['after'] ?? null) : null);
+
+        if (!is_string($next) || $next === '') {
+            return;
+        }
+
+        throw new RuntimeException(sprintf(
+            '%s is paged by cursor, not by page number: its result_info carries a cursor and no '
+                . 'total_count. A page-numbered walk would return the first page as the whole '
+                . 'collection, so it is refused. Follow result_info.cursor from the response '
+                . 'instead.',
+            $path
+        ));
     }
 }

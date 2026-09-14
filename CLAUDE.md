@@ -81,6 +81,13 @@ with "Cannot use the access token from location". `ApiException::fromResponse()`
 "Invalid zone identifier" — so a reworded message raises rather than reading as absence. And
 `/user/tokens/verify` ignores the filter entirely, reporting such a token as active.
 
+**Not every collection pages by number.** The Registrar's registrations, rulesets and list items
+page by cursor: `result_info` carries `cursor` (or `cursors.after`) and no `total_count`, and an
+empty cursor means the last page. `Endpoint::apiEach()` sends page numbers, which such a
+collection ignores, so it refuses a cursor-paged response with more to come rather than return
+the first page as the whole collection. And it yields keys across the whole walk rather than
+per page, because `yield from` each page let `iterator_to_array()` keep only the last one.
+
 **TTL 1 is "automatic", served as 300 seconds.** Not one second. `Ttl` carries the rules.
 
 ## Tests

@@ -100,6 +100,21 @@ final class ZonesTest extends TestCase
         $this->assertSame('2', $this->sentParameters()['page']);
     }
 
+    /**
+     * The public each(), not just the base class: iterator_to_array() with its default of
+     * preserving keys used to return only the last page.
+     */
+    public function test_iterator_to_array_over_each_keeps_every_page(): void
+    {
+        $this->client->pushJson(200, $this->collection([$this->row('a.example'), $this->row('b.example')], page: 1, totalPages: 2, totalCount: 4, perPage: 2));
+        $this->client->pushJson(200, $this->collection([$this->row('c.example'), $this->row('d.example')], page: 2, totalPages: 2, totalCount: 4, perPage: 2));
+
+        $zones = iterator_to_array($this->cloudflare()->zones()->each());
+
+        $this->assertSame(['a.example', 'b.example', 'c.example', 'd.example'], array_map(fn (Zone $z): string => $z->name, array_values($zones)));
+        $this->assertSame([0, 1, 2, 3], array_keys($zones));
+    }
+
     public function test_a_walk_stopped_early_stops_making_requests(): void
     {
         $this->client->pushJson(200, $this->collection([$this->row('a.example')], page: 1, totalPages: 9, totalCount: 9));

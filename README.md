@@ -415,23 +415,29 @@ $cloudflare->connection()->get('zones/' . $zoneId . '/settings/ssl')->object();
 For anything called more than once, ship an `Endpoint` subclass:
 
 ```php
-final class Firewall extends Endpoint
+final class CustomHostnames extends Endpoint
 {
-    public function rules(string $zoneId): \Generator
+    public function each(string $zoneId): \Generator
     {
-        return $this->apiEach('zones/' . $zoneId . '/firewall/rules', static fn (array $row) => $row);
+        return $this->apiEach('zones/' . $zoneId . '/custom_hostnames', static fn (array $row) => $row);
     }
 
-    protected function minimumPageSize(): int { return 1; }
-    protected function maximumPageSize(): int { return 500; }
-    protected function collectionName(): string { return 'firewall rules'; }
+    protected function minimumPageSize(): int { return 5; }
+    protected function maximumPageSize(): int { return 1000; }
+    protected function collectionName(): string { return 'custom hostnames'; }
 }
 
-$cloudflare->endpoint(Firewall::class)->rules($zoneId);
+$cloudflare->endpoint(CustomHostnames::class)->each($zoneId);
 ```
 
 There is nothing to register. Pagination, error handling and the envelope come with the base
-class.
+class. The three protected methods are required: page size limits differ per endpoint, so each
+subclass states its own.
+
+**`apiEach()` walks page-numbered collections only.** Some collections page by cursor — the
+Registrar's registrations, rulesets, list items — and carry a cursor rather than a
+`total_count` in `result_info`. `apiEach()` refuses one of those with a `RuntimeException`
+rather than return its first page as the whole collection.
 
 ## Versioning and support
 

@@ -1,6 +1,6 @@
 {
     "name": "hampel/cloudflare-api",
-    "description": "A PHP client for the Cloudflare API - zones, DNS records and token verification - over any PSR-18 HTTP client",
+    "description": "A PHP client for the Cloudflare API - zones, DNS records, Registrar registrations and token verification - over any PSR-18 HTTP client",
     "authors": [
         {
             "name": "Simon Hampel",
@@ -16,6 +16,7 @@
         "cloudflare",
         "dns",
         "zones",
+        "registrar",
         "api",
         "psr-18"
     ],

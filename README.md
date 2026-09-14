@@ -9,7 +9,8 @@
 By [Simon Hampel](mailto:simon@hampelgroup.com)
 
 A PHP client for the [Cloudflare API](https://developers.cloudflare.com/api/), built on
-**PSR-18**. It covers DNS management — zones and records — and API token verification.
+**PSR-18**. It covers DNS management — zones and records — Cloudflare Registrar registrations,
+and API token verification.
 
 ## Installation
 
@@ -82,8 +83,11 @@ Only API tokens are supported. Create one at
 | read zones and records | `Zone / Zone / Read` and `Zone / DNS / Read` |
 | change records | `Zone / DNS / Edit` |
 | read accounts (optional) | `Account / Account Settings / Read` |
+| read Registrar registrations (optional) | `Account / Registrar: Domains / Read` |
 
-Restrict **Zone Resources** to the zones the token needs.
+Restrict **Zone Resources** to the zones the token needs. The Registrar permission is
+account-level, so a token that carries it also needs **Account Resources** set to the account
+whose domains it reads.
 
 The legacy Global API Key is not supported. It cannot be scoped to a zone, cannot be verified,
 and cannot be revoked without breaking everything else that holds it.
@@ -144,6 +148,7 @@ $zone->isActive();      // Cloudflare is answering for this domain
 $zone->isPending();     // nameservers not yet pointed at Cloudflare
 $zone->isPaused();      // zone-wide: every record served DNS-only
 $zone->nameServers;
+$zone->planLegacyId;    // 'free', 'pro' - stable, where planName is display text
 $zone->fqdn('www');     // www.example.com
 $zone->fqdn('');        // example.com - the apex
 ```
@@ -268,6 +273,41 @@ An unrecognised filter is not an error on this API — it is ignored, and the wh
 comes back with a 200. Measured: `?no_such_filter=x` against a zone returned every record in
 it. `RecordQuery` refuses an empty condition value and an unorderable field for that reason.
 
+## Registrar
+
+Read-only. The domains an account holds through Cloudflare Registrar:
+
+```php
+$registrations = $cloudflare->registrations();
+
+$registrations->each($zone->accountId);                 // a generator, walked by cursor
+$registrations->all($zone->accountId);
+$registrations->get($zone->accountId, 'example.com');   // raises NotFoundException if not held
+$registrations->find($zone->accountId, 'example.com');  // null if not held
+```
+
+```php
+$registration->domainName;
+$registration->status;                  // 'active'
+$registration->expiresAt;               // DateTimeImmutable, UTC
+$registration->autoRenew;
+$registration->locked;
+$registration->privacyMode;             // 'redaction'
+$registration->isActive();
+$registration->expiresWithinDays(90);
+$registration->lapsesWithoutAction();   // auto-renew explicitly off
+```
+
+**Registering, renewing and changing a domain are not wrapped.** `POST registrations` registers a
+domain, which costs money, and `PATCH` changes its renewal and lock settings.
+
+`get()` and `find()` lower-case the name first. Cloudflare's lookup is case-sensitive: a
+registered domain asked for in capitals answers `404`, exactly as a domain the account does not
+hold.
+
+`status` and `privacyMode` are strings rather than enums, because Cloudflare does not publish the
+set of values they take.
+
 ## Pagination
 
 ```php
@@ -284,8 +324,11 @@ $page->lastPage();
 `each()` walks every page lazily — stopping early stops making requests.
 
 **Page size limits differ per endpoint.** DNS records accept 1 to 5,000,000 and default to 100.
-Zones and accounts accept 5 to 50 and default to 20. A size outside the range is refused before
-the request is sent.
+Zones and accounts accept 5 to 50 and default to 20. Registrations accept 1 to 50. A size outside
+the range is refused before the request is sent.
+
+**Registrations page by cursor, not by number**, so they have no `list()` returning a `Page`:
+`each()` follows the cursor to the end, and `page` would be ignored if sent.
 
 A walk is a sample, not a snapshot: each page is its own request. Order explicitly, and
 de-duplicate by id where completeness matters.
@@ -405,8 +448,8 @@ It is also what lets a Laravel integration route this traffic through `Http::fak
 
 ## Endpoints not yet wrapped
 
-Most of them. This package covers DNS and token verification; Cloudflare's API has some two
-thousand paths. The rest are reachable without waiting for a release:
+Most of them. This package covers DNS, Registrar registrations and token verification;
+Cloudflare's API has some two thousand paths. The rest are reachable without waiting for a release:
 
 ```php
 $cloudflare->connection()->get('zones/' . $zoneId . '/settings/ssl')->object();
@@ -434,10 +477,10 @@ There is nothing to register. Pagination, error handling and the envelope come w
 class. The three protected methods are required: page size limits differ per endpoint, so each
 subclass states its own.
 
-**`apiEach()` walks page-numbered collections only.** Some collections page by cursor — the
-Registrar's registrations, rulesets, list items — and carry a cursor rather than a
-`total_count` in `result_info`. `apiEach()` refuses one of those with a `RuntimeException`
-rather than return its first page as the whole collection.
+**Some collections page by cursor** — rulesets and list items among them — carrying a cursor
+rather than a `total_count` in `result_info`. Walk those with `apiEachByCursor()`, which takes the
+same arguments as `apiEach()`. `apiEach()` refuses one with a `RuntimeException` rather than
+return its first page as the whole collection.
 
 ## Versioning and support
 
@@ -489,8 +532,9 @@ Applies to `Entity::$raw`, `DnsRecord::$data`, `ApiResponse::$envelope` and the 
   (`?string`).
 - `$raw` exists on every entity and is an `array<string, mixed>`; `DnsRecord::$data` likewise.
 
-**Not covered:** what is *inside* `$raw`, `$data` and `$envelope`, and which numeric code
-Cloudflare uses for which failure. Those are Cloudflare's payload, passed through with no
+**Not covered:** what is *inside* `$raw`, `$data` and `$envelope`, which numeric code
+Cloudflare uses for which failure, and the values `Registration::$status` and `$privacyMode`
+take. Those are Cloudflare's payload, passed through with no
 reshaping beyond dropping entries of the wrong type. A field renamed inside a record's `data`
 does not produce a major here. Read them with `??`:
 

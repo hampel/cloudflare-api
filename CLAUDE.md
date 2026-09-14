@@ -1,6 +1,7 @@
 # hampel/cloudflare-api
 
-A PSR-18 client for the Cloudflare API, covering DNS management and token verification.
+A PSR-18 client for the Cloudflare API, covering DNS management, Registrar registrations and
+token verification.
 `README.md` is the usage documentation; this file is what a contributor needs to work on the
 package itself.
 
@@ -25,7 +26,7 @@ The layers, outermost first:
 | `Connection` | everything that touches HTTP, in one place |
 | `Result\*` | what came back: `ApiResponse`, `Page`, `ResultInfo`, `ResponseMeta` |
 | `Entity\*` | readonly value objects with `fromArray()` / `toArray()` |
-| `Support\*` | `Cast`, `Json`, `Ttl`, `RecordQuery`, `Psr17Discovery` |
+| `Support\*` | `Cast`, `Json`, `Ttl`, `RecordQuery`, `Identifier`, `Psr17Discovery` |
 
 `Connection` is the only class that knows about HTTP. `Endpoint` subclasses call its `api*`
 helpers — prefixed so subclasses keep `get()`, `create()` and `delete()` for themselves.
@@ -85,7 +86,8 @@ with "Cannot use the access token from location". `ApiException::fromResponse()`
 page by cursor: `result_info` carries `cursor` (or `cursors.after`) and no `total_count`, and an
 empty cursor means the last page. `Endpoint::apiEach()` sends page numbers, which such a
 collection ignores, so it refuses a cursor-paged response with more to come rather than return
-the first page as the whole collection. And it yields keys across the whole walk rather than
+the first page as the whole collection; `apiEachByCursor()` walks one, and raises on a cursor
+issued twice rather than loop or stop quietly. And it yields keys across the whole walk rather than
 per page, because `yield from` each page let `iterator_to_array()` keep only the last one.
 
 **TTL 1 is "automatic", served as 300 seconds.** Not one second. `Ttl` carries the rules.
@@ -115,6 +117,7 @@ the real API.
 | `zones` | find a zone by name; the status and nameservers that decide whether changes resolve |
 | `export` | the BIND zone file, and why its line count exceeds the record count |
 | `errors` | each failure branch against the live API |
+| `registrations` | the Registrar walk, at one and fifty per page, with the two counts side by side |
 | `records` | the full lifecycle. **Writes to real DNS**, and is opt-in twice over |
 
 The harness has been run against a live Free-plan zone. It is what established the measured

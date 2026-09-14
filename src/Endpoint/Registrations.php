@@ -18,8 +18,10 @@ use Hampel\Cloudflare\Api\Support\Identifier;
  * money, and `PATCH` changes renewal and lock settings on a domain somebody owns. Neither belongs
  * where a script that meant to read can reach it. Connection is the way out if one is needed.
  *
- * NEEDS REGISTRAR READ ACCESS ON THE TOKEN. Without it both paths here answer
- * `403, code 10000, Authentication error` - measured on 2026-09-14 before the token was granted it.
+ * NEEDS `Account / Registrar: Domains / Read` ON THE TOKEN - an account-level permission, so the
+ * token's account resources must include the account. Without it both paths here answer
+ * `403, code 10000, Authentication error`, measured on 2026-09-14 before the token was granted it.
+ * Cloudflare's own permissions reference does not list it; the name is the dashboard's.
  *
  * CURSOR-PAGED. `per_page` is 1 to 50 and `page` is ignored - measured: `page=2` and `page=7`
  * return the first registration again - so each() walks with apiEachByCursor().

@@ -37,8 +37,8 @@ use Psr\Log\NullLogger;
  *
  *     $cloudflare = Client::withToken($token, $guzzle);
  *
- * EXTENDING IT. This package wraps the endpoints that manage DNS and identify a token, which
- * is a dozen of Cloudflare's two thousand. The rest are reachable without waiting for a
+ * EXTENDING IT. This package wraps the endpoints that manage DNS, read Registrar registrations
+ * and identify a token, which is a dozen of Cloudflare's two thousand. The rest are reachable without waiting for a
  * release, and in two ways:
  *
  *     $cloudflare->connection()->get('zones/' . $id . '/settings/ssl')->object();   // once

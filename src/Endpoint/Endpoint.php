@@ -17,7 +17,7 @@ use Psr\Log\NullLogger;
  * anybody else's.
  *
  * EXTENDING THE API. Cloudflare's API has some two thousand paths and this package wraps the
- * dozen that manage DNS and identify a token. The rest are not out of reach: an Endpoint
+ * dozen that manage DNS, read Registrar registrations and identify a token. The rest are not out of reach: an Endpoint
  * subclass is a first-class citizen, and Client::endpoint() will construct one.
  *
  *     final class CustomHostnames extends Endpoint

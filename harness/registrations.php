@@ -3,8 +3,9 @@
 /**
  * Exercise: the account's Cloudflare Registrar domains, walked by cursor. Read-only.
  *
- * READ-ONLY, and needs a token with Registrar read access. Without it Cloudflare answers
- * `403, code 10000, Authentication error`, and this says so.
+ * READ-ONLY, and needs a token with `Account / Registrar: Domains / Read`, an account-level
+ * permission. Without it Cloudflare answers `403, code 10000, Authentication error`, and this says
+ * so.
  *
  * It settles one question a stubbed test cannot, and reports the rest:
  *
@@ -50,7 +51,7 @@ try {
     // And again at the maximum, which is normally a single page.
     $fifty = $cloudflare->registrations()->all($zone->accountId);
 } catch (NotPermittedException $e) {
-    $io->error('✗ refused: this token has no Registrar read access');
+    $io->error('✗ refused: this token lacks Account / Registrar: Domains / Read');
     $io->value('message', $e->messages()[0] ?? $e->getMessage());
 
     exit(1);

@@ -179,9 +179,11 @@ if ($accountId === null) {
 } else {
     try {
         $first = $cloudflare->registrations()->each($accountId, 1)->current();
-        $io->success($first === null ? 'Registrar read — yes (no registrations on this account)' : 'Registrar read — yes');
+        $io->success($first === null
+            ? 'Account / Registrar: Domains / Read — yes (no registrations on this account)'
+            : 'Account / Registrar: Domains / Read — yes');
     } catch (NotPermittedException) {
-        $io->info('Registrar read — no. Needed only for registrations(); the `registrations` exercise walks them.');
+        $io->info('Account / Registrar: Domains / Read — no. Needed only for registrations().');
     }
 }
 

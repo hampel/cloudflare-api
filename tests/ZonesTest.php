@@ -161,6 +161,27 @@ final class ZonesTest extends TestCase
         $this->assertSame('25', $this->sentParameters()['per_page']);
     }
 
+    /**
+     * `legacy_id` is the stable plan identifier - measured `free` on a Free zone, whose display name
+     * is "Free Website". It sits after $raw in the constructor, so positional construction written
+     * against 1.0 still works.
+     */
+    public function test_the_plan_legacy_id_is_read_and_positional_construction_is_unaffected(): void
+    {
+        $row = $this->row();
+        $row['plan'] = ['id' => '0feeeeeeeeeeeeeeeeeeeeeeeeeeeeee', 'name' => 'Free Website', 'legacy_id' => 'free'];
+
+        $zone = Zone::fromArray($row);
+
+        $this->assertSame('free', $zone->planLegacyId);
+        $this->assertSame('Free Website', $zone->planName);
+
+        $positional = new Zone(self::ZONE_ID, 'example.com', ZoneStatus::Active, ZoneType::Full, false, null, null, [], [], null, 'Free Website', null, null, null, []);
+
+        $this->assertNull($positional->planLegacyId);
+        $this->assertSame('Free Website', $positional->planName);
+    }
+
     public function test_one_zone_by_id(): void
     {
         $this->client->pushJson(200, $this->envelope($this->row()));

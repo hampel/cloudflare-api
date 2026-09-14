@@ -49,6 +49,13 @@ final class Zone implements \JsonSerializable
         public readonly ?\DateTimeImmutable $modifiedOn = null,
         public readonly ?\DateTimeImmutable $activatedOn = null,
         public readonly array $raw = [],
+        /**
+         * The plan's stable identifier - `free`, `pro` - from `plan.legacy_id`. Prefer it to
+         * $planName for anything that branches on the plan: the display name ("Free Website") has
+         * changed before, and this has not. Last in the constructor, after $raw, so code that
+         * builds a Zone positionally is unaffected by its arrival.
+         */
+        public readonly ?string $planLegacyId = null,
     ) {
     }
 
@@ -76,6 +83,7 @@ final class Zone implements \JsonSerializable
             Cast::datetime($row['modified_on'] ?? null),
             Cast::datetime($row['activated_on'] ?? null),
             $row,
+            Cast::string($plan['legacy_id'] ?? null),
         );
     }
 

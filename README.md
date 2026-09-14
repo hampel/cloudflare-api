@@ -487,11 +487,12 @@ return its first page as the whole collection.
 Semantic versioning. `1.0.0` declares the public API stable.
 
 ```json
-"hampel/cloudflare-api": "^1.0"
+"hampel/cloudflare-api": "^1.1"
 ```
 
-That is `>=1.0.0 <2.0.0`. **Write `^1.0`, not `~1.0.0`** — the tilde means `>=1.0.0 <1.1.0`,
-which resolves only patch releases.
+That is `>=1.1.0 <2.0.0`. `registrations()` needs 1.1, and 1.0.0 and 1.0.1 carry bugs fixed since
+— see the CHANGELOG. **Write `^1.1`, not `~1.1.0`** — the tilde means `>=1.1.0 <1.2.0`, which
+resolves only patch releases.
 
 - **PHP 8.3 or later.** Tested against 8.3 (including at the lowest resolvable dependency set),
   8.4 and 8.5, and against Guzzle 7 and 8.

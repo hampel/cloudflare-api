@@ -1,47 +1,42 @@
-CHANGELOG
-=========
+# Changelog
 
-1.1.0 (2026-09-14)
-------------------
+## 1.1.0 (2026-09-14)
 
 ### Added
 
-* `Client::registrations()` — read-only Cloudflare Registrar registrations: `each()`, `all()`,
+- `Client::registrations()` — read-only Cloudflare Registrar registrations: `each()`, `all()`,
   `get()` and `find()`, returning `Registration`. Needs the account-level
   `Account / Registrar: Domains / Read` permission
-* `Endpoint::apiEachByCursor()` walks a cursor-paged collection, following a `result_info.cursor`
+- `Endpoint::apiEachByCursor()` walks a cursor-paged collection, following a `result_info.cursor`
   string or `result_info.cursors.after`, and raises if a cursor is issued twice
-* `Zone::$planLegacyId`, the stable plan identifier from `plan.legacy_id`
+- `Zone::$planLegacyId`, the stable plan identifier from `plan.legacy_id`
 
-1.0.2 (2026-09-14)
-------------------
+## 1.0.2 (2026-09-14)
 
 ### Fixed
 
-* `each()` on every endpoint yields keys across the whole walk rather than restarting them on each
+- `each()` on every endpoint yields keys across the whole walk rather than restarting them on each
   page. `iterator_to_array()` over an `each()` returned only the last page
-* `Endpoint::apiEach()` raises `RuntimeException` for a cursor-paged collection with more than one
+- `Endpoint::apiEach()` raises `RuntimeException` for a cursor-paged collection with more than one
   page, rather than returning its first page as the whole collection
-* the `Endpoint` extension example in the docblock and the README includes the three required
+- the `Endpoint` extension example in the docblock and the README includes the three required
   methods, and uses `custom_hostnames` in place of the deprecated `firewall/rules`
 
-1.0.1 (2026-09-13)
-------------------
+## 1.0.1 (2026-09-13)
 
 ### Fixed
 
-* a token refused by its IP address filter raises `NotAuthenticatedException`. It arrives as a
+- a token refused by its IP address filter raises `NotAuthenticatedException`. It arrives as a
   403 with code 9109 — the code Cloudflare also uses for an unknown zone id — and was raised as
   `NotPermittedException`, so `Zones::find()` returned `null` for a zone that exists and
   `Accounts::find()` and `Accounts::first()` returned `null` as though accounts were unreadable
-* `Zones::find()` treats code 9109 as an absent zone only when the message is "Invalid zone
+- `Zones::find()` treats code 9109 as an absent zone only when the message is "Invalid zone
   identifier", and raises otherwise
-* README, `Client::verify()` and `TokenVerification` document that verification ignores the
+- README, `Client::verify()` and `TokenVerification` document that verification ignores the
   token's IP address filter, and that one real call afterwards establishes whether the token can
   be used from this address
 
-1.0.0 (2026-09-13)
-------------------
+## 1.0.0 (2026-09-13)
 
 **The public API is declared stable.** A breaking change from here means `2.0.0`. The
 constraint to write is `^1.0`.
@@ -51,74 +46,71 @@ Cloudflare adds lands in a **minor** release, and every `match` over it needs a 
 
 ### Changed
 
-* `DnsRecord::$type` is `?RecordType`. A record whose type this package does not model reads as
+- `DnsRecord::$type` is `?RecordType`. A record whose type this package does not model reads as
   `null` rather than as `RecordType::TXT`, and can be read but not written back. `raw` holds
   everything Cloudflare sent
-* `Zones::identifier()` is `Support\Identifier::for()`
+- `Zones::identifier()` is `Support\Identifier::for()`
 
 ### Added
 
-* README states what the stability promise covers and where it does not. `Entity::$raw`,
+- README states what the stability promise covers and where it does not. `Entity::$raw`,
   `DnsRecord::$data`, `ApiResponse::$envelope` and Cloudflare's numeric error codes are its
   payload: the container is covered by the major version, the contents are not
 
 ### Upgrading from 0.1.2
 
-* an exhaustive `match` over `RecordType` needs a `default` arm
-* `Zones::identifier()` callers use `Support\Identifier::for()`
+- an exhaustive `match` over `RecordType` needs a `default` arm
+- `Zones::identifier()` callers use `Support\Identifier::for()`
 
-0.1.2 (2026-09-13)
-------------------
+## 0.1.2 (2026-09-13)
 
 ### Fixed
 
-* README recommends `^0.1.1` rather than `^0.1`. `^0.1` permits 0.1.0, where a credential
+- README recommends `^0.1.1` rather than `^0.1`. `^0.1` permits 0.1.0, where a credential
   Cloudflare cannot parse raises `ValidationException` instead of `NotAuthenticatedException`
-* `ValidationException` documents that a 400 carrying code 6003 raises
+- `ValidationException` documents that a 400 carrying code 6003 raises
   `NotAuthenticatedException` instead
-* `Config` documents the accepted page size ranges — 1 to 5,000,000 for DNS records, 5 to 50
+- `Config` documents the accepted page size ranges — 1 to 5,000,000 for DNS records, 5 to 50
   for zones and accounts — so a global `pageSize` is usable only between 5 and 50
 
-0.1.1 (2026-09-13)
-------------------
+## 0.1.1 (2026-09-13)
 
 ### Fixed
 
-* a credential Cloudflare cannot parse now raises `NotAuthenticatedException`. Such a token is
+- a credential Cloudflare cannot parse now raises `NotAuthenticatedException`. Such a token is
   refused before authentication runs and answers 400 with code 6003, where a well-formed but
   wrong one answers 401 with code 1000 — only the second reached the documented type, so a
   placeholder left in a config file, a truncated value or a stray `Bearer ` prefix arrived as
   `ValidationException`. Affects 0.1.0, on every call rather than only `verify()`
-* README documents both routes
+- README documents both routes
 
-0.1.0 (2026-09-13)
-------------------
+## 0.1.0 (2026-09-13)
 
 First release.
 
-* add `Client`, built on PSR-18 and PSR-17, with no HTTP library of its own. PSR-17 factories
+- add `Client`, built on PSR-18 and PSR-17, with no HTTP library of its own. PSR-17 factories
   are discovered when none are passed
-* add `ApiToken` authentication. The Global API Key is not supported; `Authentication` is an
+- add `ApiToken` authentication. The Global API Key is not supported; `Authentication` is an
   interface
-* add `Tokens::verify()`, and `verifyForAccount()` for an account-scoped token
-* add `Zones`, read-only: `list`, `each`, `all`, `get`, `find`, `findByName`, `getByName`.
+- add `Tokens::verify()`, and `verifyForAccount()` for an account-scoped token
+- add `Zones`, read-only: `list`, `each`, `all`, `get`, `find`, `findByName`, `getByName`.
   `findByName()` verifies the zone that comes back is the one asked for
-* add `DnsRecords`: `list`, `each`, `all`, `ofType`, `named`, `get`, `find`, `create`,
+- add `DnsRecords`: `list`, `each`, `all`, `ofType`, `named`, `get`, `find`, `create`,
   `patch`, `replace`, `delete` and `export`, and `BoundDnsRecords` to bind the zone id
-* add `Accounts`. `first()` and `find()` return null where the token cannot read them
-* add `DnsRecord`, with a named constructor per record type, covering both the eight types
+- add `Accounts`. `first()` and `find()` return null where the token cannot read them
+- add `DnsRecord`, with a named constructor per record type, covering both the eight types
   that carry their value in `content` and the thirteen that carry it in `data` components
-* add `RecordQuery` for the query-parameter filters, with four predicates per text field
-* add `Ttl`. A TTL of `1` means automatic and is served as 300 seconds; anything else must be
+- add `RecordQuery` for the query-parameter filters, with four predicates per text field
+- add `Ttl`. A TTL of `1` means automatic and is served as 300 seconds; anything else must be
   60-86400, and is validated before a request is sent
-* add an exception per failure a caller can act on, each carrying Cloudflare's numeric error
+- add an exception per failure a caller can act on, each carrying Cloudflare's numeric error
   codes and the JSON pointers naming the fields at fault
-* `patch()` is a partial update. `replace()` is an HTTP PUT and resets every field not in the
+- `patch()` is a partial update. `replace()` is an HTTP PUT and resets every field not in the
   payload
-* a 2xx reporting `"success": false` is raised as a failure, as is a 2xx whose body is not the
+- a 2xx reporting `"success": false` is raised as a failure, as is a 2xx whose body is not the
   JSON envelope
-* page size limits are validated per endpoint: 1-5,000,000 for DNS records, 5-50 for zones and
+- page size limits are validated per endpoint: 1-5,000,000 for DNS records, 5-50 for zones and
   accounts
-* add a `hampel/rig` harness: `verify`, `zones`, `export`, `errors` and `records`. `records`
+- add a `hampel/rig` harness: `verify`, `zones`, `export`, `errors` and `records`. `records`
   writes to real DNS and is opt-in
-* requires PHP 8.3 or later. Tested against PHP 8.3, 8.4 and 8.5, and Guzzle 7 and 8
+- requires PHP 8.3 or later. Tested against PHP 8.3, 8.4 and 8.5, and Guzzle 7 and 8

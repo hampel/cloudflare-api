@@ -23,6 +23,7 @@ final class ClientTest extends TestCase
         $this->assertSame($client->zones(), $client->zones());
         $this->assertSame($client->records(), $client->records());
         $this->assertInstanceOf(DnsRecords::class, $client->records());
+        $this->assertSame($client->registrations(), $client->registrations());
     }
 
     public function test_any_endpoint_subclass_can_be_constructed_by_name(): void

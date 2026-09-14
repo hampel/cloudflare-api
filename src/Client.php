@@ -9,6 +9,7 @@ use Hampel\Cloudflare\Api\Authentication\Authentication;
 use Hampel\Cloudflare\Api\Endpoint\Accounts;
 use Hampel\Cloudflare\Api\Endpoint\DnsRecords;
 use Hampel\Cloudflare\Api\Endpoint\Endpoint;
+use Hampel\Cloudflare\Api\Endpoint\Registrations;
 use Hampel\Cloudflare\Api\Endpoint\Tokens;
 use Hampel\Cloudflare\Api\Endpoint\Zones;
 use Hampel\Cloudflare\Api\Exception\InvalidArgumentException;
@@ -217,6 +218,14 @@ final class Client
     public function records(): DnsRecords
     {
         return $this->endpoint(DnsRecords::class);
+    }
+
+    /**
+     * Domains held through Cloudflare Registrar - read-only. See Registrations.
+     */
+    public function registrations(): Registrations
+    {
+        return $this->endpoint(Registrations::class);
     }
 
     /**

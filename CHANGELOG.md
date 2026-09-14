@@ -1,6 +1,18 @@
 CHANGELOG
 =========
 
+1.0.2 (2026-09-14)
+------------------
+
+### Fixed
+
+* `each()` on every endpoint yields keys across the whole walk rather than restarting them on each
+  page. `iterator_to_array()` over an `each()` returned only the last page
+* `Endpoint::apiEach()` raises `RuntimeException` for a cursor-paged collection with more than one
+  page, rather than returning its first page as the whole collection
+* the `Endpoint` extension example in the docblock and the README includes the three required
+  methods, and uses `custom_hostnames` in place of the deprecated `firewall/rules`
+
 1.0.1 (2026-09-13)
 ------------------
 

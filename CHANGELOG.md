@@ -1,6 +1,18 @@
 CHANGELOG
 =========
 
+1.1.0 (2026-09-14)
+------------------
+
+### Added
+
+* `Client::registrations()` — read-only Cloudflare Registrar registrations: `each()`, `all()`,
+  `get()` and `find()`, returning `Registration`. Needs the account-level
+  `Account / Registrar: Domains / Read` permission
+* `Endpoint::apiEachByCursor()` walks a cursor-paged collection, following a `result_info.cursor`
+  string or `result_info.cursors.after`, and raises if a cursor is issued twice
+* `Zone::$planLegacyId`, the stable plan identifier from `plan.legacy_id`
+
 1.0.2 (2026-09-14)
 ------------------
 

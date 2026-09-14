@@ -169,6 +169,24 @@ try {
 
 $io->line();
 
+// Registrar read access is a separate grant, invisible like every other permission. One
+// registration is the cheapest read that exercises it; the account comes from the first zone,
+// since a zone-scoped token may not be able to list accounts at all.
+$accountId = $zones->items[0]->accountId ?? null;
+
+if ($accountId === null) {
+    $io->info('Registrar — not checked: no visible zone reported its account.');
+} else {
+    try {
+        $first = $cloudflare->registrations()->each($accountId, 1)->current();
+        $io->success($first === null ? 'Registrar read — yes (no registrations on this account)' : 'Registrar read — yes');
+    } catch (NotPermittedException) {
+        $io->info('Registrar read — no. Needed only for registrations(); the `registrations` exercise walks them.');
+    }
+}
+
+$io->line();
+
 // The same two headers from an endpoint that does send them, so the difference is visible
 // side by side rather than inferred from one absence.
 $zoneMeta = $cloudflare->connection()->get('zones', ['per_page' => 5])->meta;

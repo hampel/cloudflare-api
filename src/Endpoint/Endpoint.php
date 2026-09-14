@@ -47,9 +47,9 @@ use Psr\Log\NullLogger;
  * because those are per-endpoint and there is no safe default.
  *
  * NOT EVERY COLLECTION PAGES BY NUMBER. Some - the Registrar's registrations, rulesets, list
- * items - page by cursor, and their `result_info` carries a cursor and no `total_count`. A
- * page-numbered walk cannot follow those, and apiEach() refuses one rather than returning its
- * first page as the whole collection. See apiEach().
+ * items - page by cursor, and their `result_info` carries a cursor and no `total_count`. Walk
+ * those with apiEachByCursor(). apiEach() refuses one rather than returning its first page as
+ * the whole collection.
  */
 abstract class Endpoint
 {
@@ -237,6 +237,88 @@ abstract class Endpoint
     }
 
     /**
+     * Every item in a cursor-paged collection, fetched a page at a time and only as far as it is
+     * consumed.
+     *
+     * For the collections apiEach() refuses: `result_info` carries a cursor and no
+     * `total_count`, and the next page is reached by sending that cursor back as `?cursor=`.
+     * Two shapes exist on this API - a string `result_info.cursor`, measured on the Registrar,
+     * and an object `result_info.cursors` whose `after` points onward, in the specification for
+     * list items. Both are followed.
+     *
+     * AN EMPTY CURSOR IS THE LAST PAGE, and that is where the walk stops. Measured on the
+     * Registrar: 22 registrations at `per_page=50` answered one page with `cursor` of "".
+     *
+     * A CURSOR SEEN TWICE IS AN ERROR, not the end. An API that hands back a cursor it has
+     * already issued would loop forever, and stopping quietly at that point would return part
+     * of the collection as all of it - the failure this method exists to prevent. So it
+     * raises.
+     *
+     * Keys run 0 to n-1 across the whole walk, for the reason given on apiEach().
+     *
+     * @template TItem
+     * @param  callable(array<string, mixed>): TItem  $map
+     * @param  array<string, scalar|null>  $query
+     * @return \Generator<int, TItem>
+     */
+    protected function apiEachByCursor(
+        string $path,
+        callable $map,
+        ?int $pageSize = null,
+        array $query = [],
+    ): \Generator {
+        $query = $this->sizeQuery($pageSize, $query);
+        $seen = [];
+        $key = 0;
+
+        while (true) {
+            $response = $this->apiGet($path, $query);
+            $rows = $response->rows();
+
+            foreach ($rows as $row) {
+                yield $key++ => $map($row);
+            }
+
+            $next = self::nextCursor($response);
+
+            if ($rows === [] || $next === null) {
+                return;
+            }
+
+            if (isset($seen[$next])) {
+                throw new RuntimeException(sprintf(
+                    '%s returned a cursor it had already issued, so the walk would never end. '
+                        . 'It stopped after %d items rather than report them as the whole '
+                        . 'collection.',
+                    $path,
+                    $key
+                ));
+            }
+
+            $seen[$next] = true;
+            $query['cursor'] = $next;
+        }
+    }
+
+    /**
+     * The cursor that reaches the next page, or null when there is none - no cursor at all, or
+     * an empty one, which is how this API marks the last page.
+     */
+    private static function nextCursor(ApiResponse $response): ?string
+    {
+        $info = $response->envelope['result_info'] ?? null;
+
+        if (!is_array($info)) {
+            return null;
+        }
+
+        $cursors = $info['cursors'] ?? null;
+        $next = $info['cursor'] ?? (is_array($cursors) ? ($cursors['after'] ?? null) : null);
+
+        return is_string($next) && $next !== '' ? $next : null;
+    }
+
+    /**
      * The query for one page of a page-numbered collection, with the page size validated
      * against this endpoint's own limits before a request is spent finding out.
      *
@@ -244,6 +326,21 @@ abstract class Endpoint
      * @return array<string, scalar|null>
      */
     private function pageQuery(int $page, ?int $pageSize, array $query): array
+    {
+        $query = $this->sizeQuery($pageSize, $query);
+        $query['page'] = max(1, $page);
+
+        return $query;
+    }
+
+    /**
+     * The page size, validated against this endpoint's own limits, and nothing else - which is
+     * what a cursor walk sends, since a cursor-paged collection ignores `page`.
+     *
+     * @param  array<string, scalar|null>  $query
+     * @return array<string, scalar|null>
+     */
+    private function sizeQuery(?int $pageSize, array $query): array
     {
         $pageSize ??= $this->connection->config()->pageSize;
 
@@ -257,8 +354,6 @@ abstract class Endpoint
 
             $query['per_page'] = $pageSize;
         }
-
-        $query['page'] = max(1, $page);
 
         return $query;
     }
@@ -279,18 +374,14 @@ abstract class Endpoint
             return;
         }
 
-        $cursors = $info['cursors'] ?? null;
-        $next = $info['cursor'] ?? (is_array($cursors) ? ($cursors['after'] ?? null) : null);
-
-        if (!is_string($next) || $next === '') {
+        if (self::nextCursor($response) === null) {
             return;
         }
 
         throw new RuntimeException(sprintf(
             '%s is paged by cursor, not by page number: its result_info carries a cursor and no '
                 . 'total_count. A page-numbered walk would return the first page as the whole '
-                . 'collection, so it is refused. Follow result_info.cursor from the response '
-                . 'instead.',
+                . 'collection, so it is refused. Walk it with apiEachByCursor().',
             $path
         ));
     }

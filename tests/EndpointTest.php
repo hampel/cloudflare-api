@@ -24,6 +24,14 @@ final class EndpointTest extends TestCase
                 return $this->apiEach('things', static fn (array $row): array => $row);
             }
 
+            /**
+             * @return \Generator<int, array<string, mixed>>
+             */
+            public function walkByCursor(?int $pageSize = null): \Generator
+            {
+                return $this->apiEachByCursor('things', static fn (array $row): array => $row, $pageSize);
+            }
+
             protected function minimumPageSize(): int
             {
                 return 1;
@@ -49,6 +57,19 @@ final class EndpointTest extends TestCase
         $callable = [$endpoint, 'walk'];
         assert(is_callable($callable));
         $walk = $callable();
+        assert($walk instanceof \Generator);
+
+        return $walk;
+    }
+
+    /**
+     * @return \Generator<int, array<string, mixed>>
+     */
+    private function walkByCursor(Endpoint $endpoint, ?int $pageSize = null): \Generator
+    {
+        $callable = [$endpoint, 'walkByCursor'];
+        assert(is_callable($callable));
+        $walk = $callable($pageSize);
         assert($walk instanceof \Generator);
 
         return $walk;
@@ -139,5 +160,100 @@ final class EndpointTest extends TestCase
         $this->client->pushJson(200, $this->page([['n' => 1]], ['cursor' => 'x', 'page' => 1, 'per_page' => 1, 'count' => 1, 'total_count' => 1, 'total_pages' => 1]));
 
         $this->assertCount(1, iterator_to_array($this->walk($this->endpoint())));
+    }
+
+    /**
+     * The Registrar's shape, measured: a string cursor while more remain, "" on the last page.
+     * The cursor goes back as `?cursor=`, and `page` is never sent - the collection ignores it.
+     */
+    public function test_a_cursor_walk_follows_the_cursor_string_to_the_empty_one(): void
+    {
+        $this->client->pushJson(200, $this->page([['n' => 1], ['n' => 2]], ['cursor' => 'c1', 'per_page' => 2, 'count' => 2]));
+        $this->client->pushJson(200, $this->page([['n' => 3], ['n' => 4]], ['cursor' => 'c2', 'per_page' => 2, 'count' => 2]));
+        $this->client->pushJson(200, $this->page([['n' => 5]], ['cursor' => '', 'per_page' => 2, 'count' => 1]));
+
+        $rows = iterator_to_array($this->walkByCursor($this->endpoint(), 2));
+
+        $this->assertSame([0, 1, 2, 3, 4], array_keys($rows), 'keys run across the whole walk');
+        $this->assertSame([1, 2, 3, 4, 5], array_column($rows, 'n'));
+        $this->assertCount(3, $this->client->requests);
+
+        $queries = array_map(static function ($request): array {
+            parse_str($request->getUri()->getQuery(), $parsed);
+
+            return $parsed;
+        }, $this->client->requests);
+
+        $this->assertSame(['per_page' => '2'], $queries[0], 'the first page carries no cursor');
+        $this->assertSame(['per_page' => '2', 'cursor' => 'c1'], $queries[1]);
+        $this->assertSame(['per_page' => '2', 'cursor' => 'c2'], $queries[2]);
+
+        foreach ($queries as $query) {
+            $this->assertArrayNotHasKey('page', $query);
+        }
+    }
+
+    /**
+     * The list items shape, from the specification: `cursors.after` carries the next cursor.
+     */
+    public function test_a_cursor_walk_follows_cursors_after(): void
+    {
+        $this->client->pushJson(200, $this->page([['n' => 1]], ['cursors' => ['before' => '', 'after' => 'a1'], 'per_page' => 1, 'count' => 1]));
+        $this->client->pushJson(200, $this->page([['n' => 2]], ['cursors' => ['before' => 'a1', 'after' => ''], 'per_page' => 1, 'count' => 1]));
+
+        $this->assertSame([1, 2], array_column(iterator_to_array($this->walkByCursor($this->endpoint(), 1)), 'n'));
+        $this->assertStringContainsString('cursor=a1', $this->sentQuery());
+    }
+
+    public function test_a_cursor_walk_stops_on_an_empty_page_even_with_a_cursor(): void
+    {
+        $this->client->pushJson(200, $this->page([], ['cursor' => 'c1', 'per_page' => 2, 'count' => 0]));
+
+        $this->assertSame([], iterator_to_array($this->walkByCursor($this->endpoint(), 2)));
+        $this->assertCount(1, $this->client->requests);
+    }
+
+    /**
+     * A repeated cursor would loop forever. Stopping quietly would return part of the collection as
+     * all of it, so it raises - after yielding what it had, and naming how much that was.
+     */
+    public function test_a_cursor_issued_twice_raises_rather_than_looping_or_truncating_quietly(): void
+    {
+        $this->client->pushJson(200, $this->page([['n' => 1]], ['cursor' => 'same', 'per_page' => 1, 'count' => 1]));
+        $this->client->pushJson(200, $this->page([['n' => 2]], ['cursor' => 'same', 'per_page' => 1, 'count' => 1]));
+
+        $yielded = 0;
+
+        try {
+            foreach ($this->walkByCursor($this->endpoint(), 1) as $row) {
+                $yielded++;
+            }
+            $this->fail('a repeated cursor was followed or ignored');
+        } catch (RuntimeException $e) {
+            $this->assertSame(2, $yielded);
+            $this->assertStringContainsString('already issued', $e->getMessage());
+            $this->assertStringContainsString('after 2 items', $e->getMessage());
+            $this->assertCount(2, $this->client->requests);
+        }
+    }
+
+    public function test_the_refusal_names_the_walk_to_use_instead(): void
+    {
+        $this->client->pushJson(200, $this->page([['n' => 1]], ['cursor' => 'c1', 'per_page' => 1, 'count' => 1]));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('apiEachByCursor()');
+
+        iterator_to_array($this->walk($this->endpoint()));
+    }
+
+    public function test_a_cursor_walk_validates_the_page_size_before_a_request(): void
+    {
+        try {
+            iterator_to_array($this->walkByCursor($this->endpoint(), 51));
+            $this->fail('a page size above the maximum was sent');
+        } catch (\Hampel\Cloudflare\Api\Exception\InvalidArgumentException $e) {
+            $this->assertSame([], $this->client->requests);
+        }
     }
 }

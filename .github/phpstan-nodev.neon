@@ -1,5 +1,5 @@
 # Used only by the "Declared dependencies" job in tests.yml, which analyses src/ with the
-# dev dependencies uninstalled. Deliberately separate from phpstan.neon: that one analyses
+# dev dependencies uninstalled. Deliberately separate from phpstan.neon.dist: that one analyses
 # tests/ too, which cannot resolve PHPUnit once --no-dev has run.
 #
 # Level 0 is enough. Not-found is a basic check, so a higher level buys nothing here and

@@ -41,7 +41,7 @@ jobs:
 
       - run: vendor/bin/phpunit
 
-      # Also here, not only in a job of its own: phpstan.neon covers the whole 8.3 - 8.5
+      # Also here, not only in a job of its own: phpstan.neon.dist covers the whole 8.3 - 8.5
       # PHP range in one pass wherever it runs, but its result still depends on the
       # dependency tree it resolved against - including phpstan's own version, which is
       # what the --prefer-lowest corner is for.

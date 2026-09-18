@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.2.0 (2026-09-18)
+
+### Added
+
+- `DnsRecord::comparableContent()` and `DnsRecord::comparableTxt()` — a TXT value with its quoted
+  character strings joined and unquoted, for comparing values written in different spellings
+- the class docblock and the `a()`, `aaaa()` and `cname()` docblocks name `proxy()` and
+  `unproxy()`
+
+### Deprecated
+
+- calling `DnsRecord::mx()` without a priority. It still uses 10, and raises
+  `E_USER_DEPRECATED`; 2.0 will require it
+- calling `DnsRecord::srv()` without a priority and a weight. It still uses 0 for each, and raises
+  `E_USER_DEPRECATED`; 2.0 will require both
+
+### Fixed
+
+- the `DnsRecord::txt()` docblock said a TXT value over 255 bytes reads back split into quoted
+  strings. The API returns `content` as it was written
+- the README recommends `^1.1`, and states which PHP versions the tests run on
+
 ## 1.1.0 (2026-09-14)
 
 ### Added

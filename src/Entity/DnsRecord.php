@@ -30,12 +30,22 @@ use Hampel\Cloudflare\Api\Support\Ttl;
  *     DnsRecord::mx('example.com', 'mail.example.com', priority: 10);
  *     DnsRecord::txt('_dmarc.example.com', 'v=DMARC1; p=quarantine');
  *     DnsRecord::caa('example.com', CaaTag::Issue, 'letsencrypt.org');
- *     DnsRecord::srv('_sip._tcp.example.com', 'sip.example.com', port: 5060, priority: 10);
+ *     DnsRecord::srv('_sip._tcp.example.com', 'sip.example.com', port: 5060, priority: 10, weight: 5);
  *
+ * PROXYING IS A WITHER, not a constructor argument: `->proxy()` or `->unproxy()` after a(),
+ * aaaa() or cname(), the three types Cloudflare will proxy. unproxy() sends `proxied: false`
+ * rather than leaving the field out, which is the way to pin it.
  * OPTIONAL FIELDS ARE NULL UNTIL SET, and only the ones that are not null are sent. That is
  * what makes a patch partial. A record READ from the API has every field populated, so
  * sending that back sends all of them - which is the same values it already had, but it is
  * worth knowing which of the two you are holding before choosing patch() over replace().
+ *
+ * WHAT COMES BACK IS NOT ALWAYS WHAT WENT OUT. Cloudflare stores a TXT value as quoted
+ * character strings of at most 255 bytes each, so a long value - a DKIM key - can read back
+ * as `"first 255 bytes" "the rest"`, and a value typed with quotes reads back with them. A
+ * short unquoted one round-trips verbatim, which is why a test fixture never shows this.
+ * Compare with comparableContent(), and normalise the value you sent with comparableTxt(),
+ * rather than with string equality against `content`.
  */
 final class DnsRecord implements \JsonSerializable
 {
@@ -74,7 +84,7 @@ final class DnsRecord implements \JsonSerializable
     }
 
     /**
-     * An IPv4 address record.
+     * An IPv4 address record. Chain proxy() or unproxy() to set whether Cloudflare proxies it.
      */
     public static function a(string $name, string $address): self
     {
@@ -82,7 +92,7 @@ final class DnsRecord implements \JsonSerializable
     }
 
     /**
-     * An IPv6 address record.
+     * An IPv6 address record. Chain proxy() or unproxy() to set whether Cloudflare proxies it.
      */
     public static function aaaa(string $name, string $address): self
     {
@@ -96,6 +106,8 @@ final class DnsRecord implements \JsonSerializable
      * it into address records when answering. That is a genuine capability rather than a
      * quirk to work around, and it is why a CNAME here may carry a name that would be
      * illegal on another provider.
+     *
+     * Chain proxy() or unproxy() to set whether Cloudflare proxies it.
      */
     public static function cname(string $name, string $target): self
     {
@@ -135,8 +147,8 @@ final class DnsRecord implements \JsonSerializable
      * record suffers; it is what happens once a value crosses 255 bytes, which is exactly the
      * case a DKIM key falls into and a verification token does not.
      *
-     * Compare long TXT content by parsing it, or by asking whether the record resolves, rather
-     * than by string equality with what you submitted.
+     * So compare with comparableContent() on what came back and comparableTxt() on what you
+     * sent, rather than by string equality.
      */
     public static function txt(string $name, string $value): self
     {
@@ -502,6 +514,38 @@ final class DnsRecord implements \JsonSerializable
     }
 
     /**
+     * The content in a form that can be compared: for a TXT record, its character strings
+     * joined and unquoted, which is how SPF and DKIM read them; for any other type, `content`
+     * unchanged. Null when there is no content.
+     *
+     * `"v=spf1 " "-all"`, `"v=spf1 -all"` and `v=spf1 -all` all give `v=spf1 -all`.
+     */
+    public function comparableContent(): ?string
+    {
+        if ($this->content === null || $this->type !== RecordType::TXT) {
+            return $this->content;
+        }
+
+        return self::comparableTxt($this->content);
+    }
+
+    /**
+     * A TXT value in the same form comparableContent() gives, for normalising the value you
+     * sent before comparing it with what came back.
+     *
+     * A value made wholly of quoted character strings is joined and unquoted, with `\"`,
+     * `\\` and `\DDD` escapes resolved. Anything else - an unquoted value, or quoting that
+     * does not parse - is returned trimmed and otherwise as given, since there is no way to
+     * know what it was meant to be.
+     */
+    public static function comparableTxt(string $value): string
+    {
+        $value = trim($value);
+
+        return self::joinCharacterStrings($value) ?? $value;
+    }
+
+    /**
      * One component out of a `data` record - `$record->component('tag')` on a CAA.
      */
     public function component(string $key, mixed $default = null): mixed
@@ -652,6 +696,69 @@ final class DnsRecord implements \JsonSerializable
         }
 
         return $name;
+    }
+
+    /**
+     * `"a" "b"` as `ab`, or null when the value is not a sequence of quoted strings.
+     */
+    private static function joinCharacterStrings(string $value): ?string
+    {
+        $length = strlen($value);
+        $position = 0;
+        $parts = [];
+
+        while ($position < $length) {
+            if ($value[$position] !== '"') {
+                return null;
+            }
+
+            $position++;
+            $part = '';
+
+            while (true) {
+                if ($position >= $length) {
+                    return null;
+                }
+
+                $char = $value[$position];
+
+                if ($char === '"') {
+                    $position++;
+
+                    break;
+                }
+
+                if ($char === '\\' && $position + 1 < $length) {
+                    $digits = substr($value, $position + 1, 3);
+
+                    if (strlen($digits) === 3 && ctype_digit($digits) && (int) $digits <= 255) {
+                        $part .= chr((int) $digits);
+                        $position += 4;
+
+                        continue;
+                    }
+
+                    $part .= $value[$position + 1];
+                    $position += 2;
+
+                    continue;
+                }
+
+                $part .= $char;
+                $position++;
+            }
+
+            $parts[] = $part;
+            $spaces = strspn($value, " \t", $position);
+
+            if ($spaces === 0 && $position < $length && $value[$position] !== '"') {
+                return null;
+            }
+
+            $position += $spaces;
+        }
+
+        return $parts === [] ? null : implode('', $parts);
     }
 
     private static function required(string $value, string $message): string

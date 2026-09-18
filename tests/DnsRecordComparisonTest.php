@@ -27,7 +27,7 @@ final class DnsRecordComparisonTest extends BaseTestCase
             'one quoted string' => ['"v=spf1 -all"', 'v=spf1 -all'],
             'split into two' => ['"v=spf1 " "-all"', 'v=spf1 -all'],
             'split with no space' => ['"v=spf1 ""-all"', 'v=spf1 -all'],
-            'a long value as Cloudflare splits it' => ['"' . str_repeat('a', 255) . '" "' . str_repeat('b', 145) . '"', $long],
+            'a long value split into strings' => ['"' . str_repeat('a', 255) . '" "' . str_repeat('b', 145) . '"', $long],
             'a long value unsplit' => [$long, $long],
             'surrounding whitespace' => ["  \"v=spf1 -all\"\t", 'v=spf1 -all'],
             'escaped quote and backslash' => ['"say \"hi\" \\\\ bye"', 'say "hi" \\ bye'],
@@ -45,18 +45,18 @@ final class DnsRecordComparisonTest extends BaseTestCase
         $this->assertSame($expected, DnsRecord::comparableTxt($value));
     }
 
-    public function test_a_long_txt_value_compares_equal_to_its_split_read_back(): void
+    public function test_a_long_txt_value_compares_equal_to_its_split_spelling(): void
     {
         $sent = str_repeat('k', 400);
 
-        $readBack = DnsRecord::fromArray([
+        $split = DnsRecord::fromArray([
             'type' => 'TXT',
             'name' => 'selector._domainkey.example.com',
             'content' => '"' . substr($sent, 0, 255) . '" "' . substr($sent, 255) . '"',
         ]);
 
-        $this->assertNotSame($sent, $readBack->content);
-        $this->assertSame(DnsRecord::comparableTxt($sent), $readBack->comparableContent());
+        $this->assertNotSame($sent, $split->content);
+        $this->assertSame(DnsRecord::comparableTxt($sent), $split->comparableContent());
     }
 
     public function test_content_of_other_types_is_unchanged(): void

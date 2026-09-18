@@ -40,12 +40,11 @@ use Hampel\Cloudflare\Api\Support\Ttl;
  * sending that back sends all of them - which is the same values it already had, but it is
  * worth knowing which of the two you are holding before choosing patch() over replace().
  *
- * WHAT COMES BACK IS NOT ALWAYS WHAT WENT OUT. Cloudflare stores a TXT value as quoted
- * character strings of at most 255 bytes each, so a long value - a DKIM key - can read back
- * as `"first 255 bytes" "the rest"`, and a value typed with quotes reads back with them. A
- * short unquoted one round-trips verbatim, which is why a test fixture never shows this.
- * Compare with comparableContent(), and normalise the value you sent with comparableTxt(),
- * rather than with string equality against `content`.
+ * ONE TXT VALUE HAS SEVERAL SPELLINGS. `v=spf1 -all`, `"v=spf1 -all"` and
+ * `"v=spf1 " "-all"` are the same record, and `content` holds whichever one was written -
+ * by this package, the dashboard or another tool. Comparing two records, or a record with a
+ * value from elsewhere, by string equality reports a difference that is not one. Compare
+ * comparableContent() with comparableTxt() of the other value instead.
  */
 final class DnsRecord implements \JsonSerializable
 {
@@ -143,22 +142,15 @@ final class DnsRecord implements \JsonSerializable
     /**
      * A text record - SPF, DKIM, DMARC, a domain-verification token.
      *
-     * THE VALUE IS PASSED THROUGH VERBATIM, and two things about how Cloudflare stores it are
-     * worth knowing before comparing what you sent with what comes back.
+     * THE VALUE IS PASSED THROUGH VERBATIM, and the API returns it verbatim. A TXT record is a
+     * sequence of quoted character strings of at most 255 bytes each (RFC 1035), and Cloudflare
+     * splits a longer value into several when it SERVES the record - but `content` keeps the
+     * spelling it was written in. Measured on 2026-09-18: a 400-byte unquoted value, the same
+     * value sent pre-split, and a short value sent in quotes all came back byte-identical.
      *
-     * A TXT record is a sequence of quoted character strings, each at most 255 bytes
-     * (RFC 1035). Cloudflare splits anything longer across several strings automatically - so
-     * a 2048-bit DKIM key sent as one long value is stored correctly and READ BACK as
-     * `"first 255 bytes" "the rest"`. An equality check against the original then fails on a
-     * record that is perfectly right.
-     *
-     * A SHORT VALUE DOES ROUND-TRIP VERBATIM - measured on 2026-09-12, an unquoted
-     * 43-byte value came back byte-identical. So the rewriting is not something every TXT
-     * record suffers; it is what happens once a value crosses 255 bytes, which is exactly the
-     * case a DKIM key falls into and a verification token does not.
-     *
-     * So compare with comparableContent() on what came back and comparableTxt() on what you
-     * sent, rather than by string equality.
+     * So a record written here compares equal to what was sent. A record written elsewhere
+     * may be spelled differently for the same value - quoted, or split - which is what
+     * comparableContent() and comparableTxt() are for.
      */
     public static function txt(string $name, string $value): self
     {

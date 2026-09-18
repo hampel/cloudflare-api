@@ -5,7 +5,8 @@
 ### Added
 
 - `DnsRecord::comparableContent()` and `DnsRecord::comparableTxt()` — a TXT value with its quoted
-  character strings joined and unquoted, for comparing values written in different spellings
+  character strings joined, unquoted and unescaped, for comparing values written in different
+  spellings or taken from a DNS answer
 - the class docblock and the `a()`, `aaaa()` and `cname()` docblocks name `proxy()` and
   `unproxy()`
 

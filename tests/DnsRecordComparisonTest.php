@@ -32,6 +32,7 @@ final class DnsRecordComparisonTest extends BaseTestCase
             'surrounding whitespace' => ["  \"v=spf1 -all\"\t", 'v=spf1 -all'],
             'escaped quote and backslash' => ['"say \"hi\" \\\\ bye"', 'say "hi" \\ bye'],
             'decimal escape' => ['"semi\059colon"', 'semi;colon'],
+            'a DMARC value as dig prints it' => ['"v=DMARC1\\; p=none\\; pct=100"', 'v=DMARC1; p=none; pct=100'],
             'unterminated quoting left alone' => ['"v=spf1 -all', '"v=spf1 -all'],
             'text between strings left alone' => ['"a" b "c"', '"a" b "c"'],
             'a quote inside an unquoted value left alone' => ['a "b" c', 'a "b" c'],

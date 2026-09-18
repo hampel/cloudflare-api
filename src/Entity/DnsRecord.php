@@ -548,8 +548,9 @@ final class DnsRecord implements \JsonSerializable
      * A TXT value in the same form comparableContent() gives, for normalising the value you
      * sent before comparing it with what came back.
      *
-     * A value made wholly of quoted character strings is joined and unquoted, with `\"`,
-     * `\\` and `\DDD` escapes resolved. Anything else - an unquoted value, or quoting that
+     * A value made wholly of quoted character strings is joined and unquoted, with every
+     * backslash escape resolved - `\"`, `\\`, `\DDD`, and the `\;` dig prints - so a value
+     * from the API and the same value from a DNS answer compare equal. Anything else - an unquoted value, or quoting that
      * does not parse - is returned trimmed and otherwise as given, since there is no way to
      * know what it was meant to be.
      */

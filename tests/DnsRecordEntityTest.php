@@ -136,7 +136,7 @@ final class DnsRecordEntityTest extends BaseTestCase
     public function test_an_undecorated_srv_name_is_refused(): void
     {
         try {
-            DnsRecord::srv('sip.example.com', 'sip.example.com', port: 5060);
+            DnsRecord::srv('sip.example.com', 'sip.example.com', port: 5060, priority: 10, weight: 5);
             $this->fail('did not raise');
         } catch (InvalidArgumentException $e) {
             $this->assertStringContainsString('_sip._tcp.example.com', $e->getMessage());
@@ -270,7 +270,7 @@ final class DnsRecordEntityTest extends BaseTestCase
 
     public function test_a_priority_on_an_srv_points_at_the_data_components(): void
     {
-        $record = DnsRecord::srv('_sip._tcp.example.com', 'sip.example.com', port: 5060);
+        $record = DnsRecord::srv('_sip._tcp.example.com', 'sip.example.com', port: 5060, priority: 10, weight: 5);
 
         try {
             $record->withPriority(10);

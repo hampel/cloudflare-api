@@ -119,9 +119,19 @@ final class DnsRecord implements \JsonSerializable
      *
      * `name` is the domain receiving the mail, so for mail addressed at the domain itself it
      * is the zone name - `example.com`, not an empty string.
+     *
+     * PASS THE PRIORITY. Cloudflare requires one for MX, and an MX set is an ordered list with
+     * no right default. Leaving it out is deprecated: it still gives 10, with an
+     * E_USER_DEPRECATED notice, and it will be required in 2.0.
      */
-    public static function mx(string $name, string $mailServer, int $priority = 10): self
+    public static function mx(string $name, string $mailServer, ?int $priority = null): self
     {
+        if ($priority === null) {
+            self::deprecated('Calling DnsRecord::mx() without a priority is deprecated and will be '
+                . 'required in 2.0. Cloudflare requires one for MX; 10 was used. Pass it explicitly.');
+            $priority = 10;
+        }
+
         return new self(
             RecordType::MX,
             self::name($name),
@@ -202,14 +212,27 @@ final class DnsRecord implements \JsonSerializable
      * circulation.
      *
      * Lower priority wins; among equal priorities, higher weight is preferred.
+     *
+     * PASS THE PRIORITY AND THE WEIGHT. Both order the set, so neither has a right default.
+     * Leaving either out is deprecated: it still gives 0, with an E_USER_DEPRECATED notice,
+     * and both will be required in 2.0.
      */
     public static function srv(
         string $name,
         string $target,
         int $port,
-        int $priority = 0,
-        int $weight = 0,
+        ?int $priority = null,
+        ?int $weight = null,
     ): self {
+        if ($priority === null || $weight === null) {
+            self::deprecated('Calling DnsRecord::srv() without a priority and a weight is deprecated '
+                . 'and both will be required in 2.0. 0 was used for what was left out. Pass both '
+                . 'explicitly.');
+        }
+
+        $priority ??= 0;
+        $weight ??= 0;
+
         return new self(RecordType::SRV, self::srvName($name), data: [
             'priority' => self::inRange($priority, 0, 65535, 'priority'),
             'weight' => self::inRange($weight, 0, 65535, 'weight'),
@@ -759,6 +782,11 @@ final class DnsRecord implements \JsonSerializable
         }
 
         return $parts === [] ? null : implode('', $parts);
+    }
+
+    private static function deprecated(string $message): void
+    {
+        trigger_error($message, E_USER_DEPRECATED);
     }
 
     private static function required(string $value, string $message): string

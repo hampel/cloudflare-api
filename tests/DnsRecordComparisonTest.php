@@ -6,10 +6,12 @@ namespace Hampel\Cloudflare\Api\Tests;
 
 use Hampel\Cloudflare\Api\Entity\DnsRecord;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\TestCase as BaseTestCase;
 
 /**
- * Comparing what came back with what was sent.
+ * Comparing what came back with what was sent, and the factory defaults that are deprecated
+ * because an omitted argument silently chose an ordering.
  */
 final class DnsRecordComparisonTest extends BaseTestCase
 {
@@ -69,5 +71,51 @@ final class DnsRecordComparisonTest extends BaseTestCase
         $record = DnsRecord::fromArray(['type' => 'TXT', 'name' => 'a.example.com']);
 
         $this->assertNull($record->comparableContent());
+    }
+
+    #[IgnoreDeprecations]
+    public function test_mx_without_a_priority_is_deprecated_and_still_gives_ten(): void
+    {
+        $this->expectUserDeprecationMessageMatches('/DnsRecord::mx\(\) without a priority is deprecated/');
+
+        $record = DnsRecord::mx('example.com', 'mail.example.com');
+
+        $this->assertSame(10, $record->priority);
+    }
+
+    public function test_mx_with_a_priority_is_not_deprecated(): void
+    {
+        $this->assertSame(0, DnsRecord::mx('example.com', 'mail.example.com', 0)->priority);
+    }
+
+    /**
+     * @return array<string, array{?int, ?int}>
+     */
+    public static function srvOmissions(): array
+    {
+        return [
+            'both left out' => [null, null],
+            'weight left out' => [10, null],
+            'priority left out' => [null, 5],
+        ];
+    }
+
+    #[DataProvider('srvOmissions')]
+    #[IgnoreDeprecations]
+    public function test_srv_without_a_priority_and_a_weight_is_deprecated(?int $priority, ?int $weight): void
+    {
+        $this->expectUserDeprecationMessageMatches('/DnsRecord::srv\(\) without a priority and a weight is deprecated/');
+
+        $record = DnsRecord::srv('_sip._tcp.example.com', 'sip.example.com', 5060, $priority, $weight);
+
+        $this->assertSame($priority ?? 0, $record->component('priority'));
+        $this->assertSame($weight ?? 0, $record->component('weight'));
+    }
+
+    public function test_srv_with_both_is_not_deprecated(): void
+    {
+        $record = DnsRecord::srv('_sip._tcp.example.com', 'sip.example.com', 5060, 0, 0);
+
+        $this->assertSame(0, $record->component('priority'));
     }
 }

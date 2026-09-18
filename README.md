@@ -214,8 +214,27 @@ Then refine:
 ```php
 $record->withTtl(3600)->withComment('why this exists')->withTags(['production']);  // tags need a paid plan
 $record->proxy();     // A, AAAA and CNAME only
-$record->unproxy();
+$record->unproxy();   // sends proxied: false rather than leaving it to the default
 ```
+
+**Pass the ordering arguments.** Cloudflare requires a priority for MX, and SRV orders by
+priority and then weight. Leaving them out of `mx()` or `srv()` is deprecated since 1.2: it
+still gives the old default — 10 for MX, 0 for SRV — with an `E_USER_DEPRECATED` notice, and
+2.0 will require them.
+
+### Comparing TXT values
+
+One TXT value has several spellings: `v=spf1 -all`, `"v=spf1 -all"` and `"v=spf1 " "-all"` are
+the same record. The API returns `content` in whichever spelling it was written in — by this
+package, the dashboard or another tool — so string equality reports differences that are not
+there. Compare through the helpers instead:
+
+```php
+$record->comparableContent() === DnsRecord::comparableTxt($expected);
+```
+
+Both join the quoted strings and remove the quoting. Content of any other type is returned
+unchanged.
 
 ### Two families of record type
 

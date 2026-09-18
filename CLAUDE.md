@@ -90,6 +90,11 @@ the first page as the whole collection; `apiEachByCursor()` walks one, and raise
 issued twice rather than loop or stop quietly. And it yields keys across the whole walk rather than
 per page, because `yield from` each page let `iterator_to_array()` keep only the last one.
 
+**TXT content keeps the spelling it was written in.** `"a" "b"`, `"ab"` and `ab` are one value,
+and the API returns whichever was sent - it splits at 255 bytes only when serving. So
+`comparableContent()` joins and unquotes rather than the entity normalising on read, which would
+change what a fetched record sends back.
+
 **TTL 1 is "automatic", served as 300 seconds.** Not one second. `Ttl` carries the rules.
 
 ## Tests
@@ -122,9 +127,9 @@ the real API.
 | `txt` | how a long, pre-split or quoted TXT value comes back. **Writes to real DNS**, same opt-ins |
 
 The harness has been run against a live Free-plan zone. It is what established the measured
-facts above, and it corrected three docblocks and one real bug — `Zones::find()` raised for
+facts above, and it corrected four docblocks and one real bug — `Zones::find()` raised for
 the commonest case it exists to handle, because the zone endpoint reports absence with a 403.
-Run `verify`, `zones`, `export` and `errors` (all read-only) before `records`.
+Run `verify`, `zones`, `export` and `errors` (all read-only) before `records` or `txt`.
 
 `records` and `txt` need `CLOUDFLARE_WRITE_RECORDS=yes`, and under an agent also
 `CLOUDFLARE_AGENT_MAY_WRITE_RECORDS=1` on the command line. The second exists because the

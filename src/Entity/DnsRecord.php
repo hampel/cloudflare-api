@@ -550,9 +550,15 @@ final class DnsRecord implements \JsonSerializable
      *
      * A value made wholly of quoted character strings is joined and unquoted, with every
      * backslash escape resolved - `\"`, `\\`, `\DDD`, and the `\;` dig prints - so a value
-     * from the API and the same value from a DNS answer compare equal. Anything else - an unquoted value, or quoting that
-     * does not parse - is returned trimmed and otherwise as given, since there is no way to
-     * know what it was meant to be.
+     * from the API and the same value from a DNS answer compare equal. Anything else - an
+     * unquoted value, or quoting that does not parse - is returned trimmed and otherwise as
+     * given, since there is no way to know what it was meant to be.
+     *
+     * IT READS PRESENTATION FORMAT: Cloudflare's `content`, a zone file, a dig answer. A
+     * provider whose API returns the decoded string instead is already in the compared form
+     * and should not be passed through this - a value there that starts and ends with a quote
+     * has quote characters in its data, which dig shows as `"\"...\""`, and removing them
+     * would equate two records that differ on the wire.
      */
     public static function comparableTxt(string $value): string
     {

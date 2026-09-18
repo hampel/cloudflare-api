@@ -142,8 +142,8 @@ try {
     $fetched = $records->get($recordId);
     $io->line(sprintf('    %s', $fetched->describe()));
 
-    // Cloudflare stores TXT content as quoted character strings and splits anything over 255
-    // bytes, so what comes back need not be byte-identical to what went out.
+    // The API returns TXT content in the spelling it was written in - the `txt` exercise
+    // measures that for long, pre-split and quoted values.
     $io->line(sprintf('    %-16s %s', 'content sent', 'created by the hampel/cloudflare-api harness'));
     $io->line(sprintf('    %-16s %s', 'content stored', (string) $fetched->content));
 

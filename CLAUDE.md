@@ -119,13 +119,14 @@ the real API.
 | `errors` | each failure branch against the live API |
 | `registrations` | the Registrar walk, at one and fifty per page, with the two counts side by side |
 | `records` | the full lifecycle. **Writes to real DNS**, and is opt-in twice over |
+| `txt` | how a long, pre-split or quoted TXT value comes back. **Writes to real DNS**, same opt-ins |
 
 The harness has been run against a live Free-plan zone. It is what established the measured
 facts above, and it corrected three docblocks and one real bug — `Zones::find()` raised for
 the commonest case it exists to handle, because the zone endpoint reports absence with a 403.
 Run `verify`, `zones`, `export` and `errors` (all read-only) before `records`.
 
-`records` needs `CLOUDFLARE_WRITE_RECORDS=yes`, and under an agent also
+`records` and `txt` need `CLOUDFLARE_WRITE_RECORDS=yes`, and under an agent also
 `CLOUDFLARE_AGENT_MAY_WRITE_RECORDS=1` on the command line. The second exists because the
 first lives in the credential owner's `.env` and generally says yes, so an agent would
 otherwise inherit an authorisation it never made.
